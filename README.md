@@ -1,10 +1,6 @@
 # 信大AIO · NUIST AIO
 
-Flutter / Material Design 3 的南京信息工程大学校园服务整合应用，当前 v0.3.5。
-
-站点清单与后续接入规则见 [校园服务初始化](docs/site-initialization.md)，开发约束见 [AGENTS.md](AGENTS.md)。
-
-真机 SSO 修复及证书兼容维护要求见 [真机验证记录](docs/device-sso-verification.md)。
+Flutter / Material Design 3 的南京信息工程大学校园服务整合应用.
 
 ## 功能
 
@@ -36,7 +32,7 @@ flutter run -d macos
 - `lib/src/home_page.dart`：首页。
 - `lib/src/shell.dart`：导航、功能和我的。
 - `lib/src/schedule/`：课表模型、原生导入页与展示。
-- `lib/src/academic/`、`assets/js/nuist_academic.js`：四项教务查询与官方浏览器入口，接口证据见 [接入记录](docs/academic-services.md)。
+- `lib/src/academic/`、`assets/js/nuist_academic.js`：四项教务查询与官方浏览器入口
 - `lib/src/accounts/`：校园账户查询、宿舍选择、缓存与展示。
 - `assets/data/nuist_dormitories.json`：三套学校电费服务的完整目录快照。
 - `assets/js/nuist_accounts.js`：固定接口的只读校园账户适配器。
