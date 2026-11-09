@@ -39,11 +39,6 @@ flutter run -d macos
 - `assets/js/nuist_schedule.js`：本地打包的教务 API 读取逻辑。
 - `lib/src/app.dart`、`theme_settings.dart`：MD3 与主题。
 - `lib/src/auth/`：统一认证与安全存储。
-- `docs/authentication-research.md`：最初的认证调研。
-- `docs/schedule-integration.md`：课表接入、实测证据及边界。
-- `docs/campus-accounts-integration.md`：余额、账单、电费接口及完整目录说明。
-
-Android 使用 AGP 8.13.1 / Gradle 8.14 / Kotlin 2.2.21，兼容当前稳定版 WebView 插件；Gradle 限制 2GB 堆内存与 2 个工作线程。iOS 保留源码及 Keychain 配置，不启动模拟器验证。
 
 ## 截图
 
@@ -53,6 +48,6 @@ Android 使用 AGP 8.13.1 / Gradle 8.14 / Kotlin 2.2.21，兼容当前稳定版 
 CAPTURE_UI=1 UI_FONT='/path/to/chinese-font.ttc' flutter test test/app_test.dart --plain-name 'capture UI review images'
 ```
 
-输出到 `build/ui-preview/`。`*-example.png` 使用合成数据，不展示真实账户数据。
+输出到 `build/ui-preview/`。`*-example.png` 使用合成数据。
 
-课表接口参考拾光 NUIST MIT 许可适配脚本，许可随 App 打包并在开源许可页展示；详情见接入文档。
+课表接口参考拾光 NUIST MIT 许可适配脚本，许可随 App 打包并在开源许可页展示。
