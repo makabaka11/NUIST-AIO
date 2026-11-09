@@ -1,0 +1,10 @@
+{
+  "source": "https://authserver.nuist.edu.cn/authserver/login",
+  "verifiedBy": "system TLS verification plus the derived SPKI pin",
+  "spkiSHA256": "EEbbi+f2yulRUMwmAwapVPxsh+q+LVZtDRIrKiO1G0s=",
+  "scope": "icard.nuist.edu.cn only",
+  "serverIssue": "icard sends leaf only; authentication host sends full chain",
+  "userApproved": true,
+  "leafValidUntil": "2027-03-12T01:02:42Z",
+  "reviewedOn": "2026-11-09"
+}

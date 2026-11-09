@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+    <!-- Server omits the intermediate. Restrict the compatibility anchor to
+         this exact host AND the currently verified school public key.
+         No pin expiration: key rotation fails closed until the app is updated. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">icard.nuist.edu.cn</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/nuist_xcc_intermediate" overridePins="false" />
+        </trust-anchors>
+        <pin-set><pin digest="SHA-256">EEbbi+f2yulRUMwmAwapVPxsh+q+LVZtDRIrKiO1G0s=</pin></pin-set>
+    </domain-config>
+</network-security-config>

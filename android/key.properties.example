@@ -1,0 +1,6 @@
+# Copy to key.properties only when configuring an existing key.
+# Keep the actual key.properties and keystore private and backed up together.
+storeFile=../keystore/nuistaio-release.jks
+keyAlias=nuistaio-release
+storePassword=REPLACE_WITH_LOCAL_STORE_PASSWORD
+keyPassword=REPLACE_WITH_LOCAL_KEY_PASSWORD
