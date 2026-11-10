@@ -250,6 +250,18 @@ class Electricity {
         : '${n.toStringAsFixed(2)}${unit.isEmpty ? '' : ' $unit'}';
   }
 
+  /// 提取主数值，用于历史趋势图。
+  double get primaryValue =>
+      num.tryParse(primary.value.replaceAll(RegExp('[度元]'), '').trim())
+          ?.toDouble() ??
+      0;
+
+  /// 供电状态文字（从 fields 中查找，未返回时不推断供电状态）。
+  String get status => fields.entries
+      .where((e) => RegExp('状态|供电').hasMatch(e.key))
+      .map((e) => e.value)
+      .firstWhere((_) => true, orElse: () => '状态未返回');
+
   factory Electricity.fromJson(Map<String, dynamic> j) {
     final fields = Map<String, String>.from(j['fields']);
     if (fields.isEmpty) throw const FormatException('缺少电费字段。');
@@ -262,39 +274,158 @@ class Electricity {
   };
 }
 
+/// 余额历史快照——每次查询校园卡时追加一条，用于绘制余额曲线。
+class WalletSnapshot implements DateTimeStamped {
+  const WalletSnapshot(this.timestamp, this.balanceCents);
+  @override
+  final DateTime timestamp;
+  final int balanceCents;
+  factory WalletSnapshot.fromJson(Map<String, dynamic> j) =>
+      WalletSnapshot(_stamp(j['timestamp']), j['balanceCents'] as int);
+  Map<String, dynamic> toJson() => {
+    'timestamp': timestamp.toIso8601String(),
+    'balanceCents': balanceCents,
+  };
+}
+
+/// 电量历史快照——每次查询电费时追加一条，用于绘制电量趋势图。
+class ElectricitySnapshot implements DateTimeStamped {
+  const ElectricitySnapshot(
+    this.timestamp,
+    this.value,
+    this.unit,
+    this.status,
+    this.dormKey,
+  );
+  @override
+  final DateTime timestamp;
+  final double value;
+  final String unit, status, dormKey;
+  factory ElectricitySnapshot.fromElectricity(Electricity e) =>
+      ElectricitySnapshot(
+        e.updatedAt,
+        e.primaryValue,
+        e.unit,
+        e.status,
+        e.dormKey,
+      );
+  factory ElectricitySnapshot.fromJson(Map<String, dynamic> j) =>
+      ElectricitySnapshot(
+        _stamp(j['timestamp']),
+        (j['value'] as num).toDouble(),
+        j['unit'] as String,
+        j['status'] as String,
+        j['dormKey'] as String,
+      );
+  Map<String, dynamic> toJson() => {
+    'timestamp': timestamp.toIso8601String(),
+    'value': value,
+    'unit': unit,
+    'status': status,
+    'dormKey': dormKey,
+  };
+}
+
 class AccountCache {
   const AccountCache({
     this.wallet,
     this.bills,
     this.currentBills,
     this.electricity,
+    this.walletHistory = const [],
+    this.electricityHistory = const [],
+    this.monthlyBills = const {},
   });
   final Wallet? wallet;
   final BillPage? bills, currentBills;
   final Electricity? electricity;
+  final List<WalletSnapshot> walletHistory;
+  final List<ElectricitySnapshot> electricityHistory;
+
+  /// 多月账单缓存，key 为 "2026-10" 格式。
+  final Map<String, BillPage> monthlyBills;
+
+  /// 历史快照最大保留条数，超出后从最旧端裁剪。
+  static const int _maxHistory = 200;
+
   AccountCache merge(Map<String, dynamic> j) {
     final nextBill = j['bills'] == null
         ? null
         : BillPage.fromJson(Map<String, dynamic>.from(j['bills']));
+    // 追加余额历史快照（去重：同分钟内不重复）。
+    List<WalletSnapshot> walletHist = walletHistory;
+    if (j['wallet'] != null) {
+      final w = Wallet.fromJson(Map<String, dynamic>.from(j['wallet']));
+      final snap = WalletSnapshot(w.updatedAt, w.balance);
+      final last = walletHistory.isEmpty ? null : walletHistory.last;
+      if (last == null ||
+          snap.timestamp.difference(last.timestamp).inMinutes.abs() >= 1 ||
+          snap.balanceCents != last.balanceCents) {
+        walletHist = [...walletHistory, snap];
+        if (walletHist.length > _maxHistory) {
+          walletHist = walletHist.sublist(walletHist.length - _maxHistory);
+        }
+      }
+    }
+    // 追加电量历史快照（仅当 dormKey 匹配时）。
+    List<ElectricitySnapshot> elecHist = electricityHistory;
+    Electricity? nextElec;
+    if (j['electricity'] != null) {
+      nextElec = Electricity.fromJson(
+        Map<String, dynamic>.from(j['electricity']),
+      );
+      // 只保留与当前宿舍一致的记录，切换宿舍时清空旧记录。
+      final base =
+          nextElec.dormKey == (electricity?.dormKey ?? nextElec.dormKey)
+          ? electricityHistory
+          : <ElectricitySnapshot>[];
+      final snap = ElectricitySnapshot.fromElectricity(nextElec);
+      final last = base.isEmpty ? null : base.last;
+      if (last == null ||
+          snap.timestamp.difference(last.timestamp).inMinutes.abs() >= 1 ||
+          (snap.value - last.value).abs() >= 0.01) {
+        elecHist = [...base, snap];
+        if (elecHist.length > _maxHistory) {
+          elecHist = elecHist.sublist(elecHist.length - _maxHistory);
+        }
+      } else {
+        elecHist = base;
+      }
+    } else {
+      nextElec = electricity;
+    }
+    // 缓存多月账单。
+    Map<String, BillPage> monthly = Map.of(monthlyBills);
+    if (nextBill != null) monthly[nextBill.month] = nextBill;
     return AccountCache(
       wallet: j['wallet'] == null
           ? wallet
           : Wallet.fromJson(Map<String, dynamic>.from(j['wallet'])),
       bills: nextBill ?? bills,
       currentBills: nextBill?.month == currentMonth() ? nextBill : currentBills,
-      electricity: j['electricity'] == null
-          ? electricity
-          : Electricity.fromJson(Map<String, dynamic>.from(j['electricity'])),
+      electricity: nextElec,
+      walletHistory: walletHist,
+      electricityHistory: elecHist,
+      monthlyBills: monthly,
     );
   }
 
-  AccountCache withoutElectricity() =>
-      AccountCache(wallet: wallet, bills: bills, currentBills: currentBills);
+  AccountCache withoutElectricity() => AccountCache(
+    wallet: wallet,
+    bills: bills,
+    currentBills: currentBills,
+    walletHistory: walletHistory,
+    electricityHistory: const [],
+    monthlyBills: monthlyBills,
+  );
   Map<String, dynamic> toJson() => {
     'wallet': wallet?.toJson(),
     'bills': bills?.toJson(),
     'currentBills': currentBills?.toJson(),
     'electricity': electricity?.toJson(),
+    'walletHistory': walletHistory.map((x) => x.toJson()).toList(),
+    'electricityHistory': electricityHistory.map((x) => x.toJson()).toList(),
+    'monthlyBills': monthlyBills.map((k, v) => MapEntry(k, v.toJson())),
   };
   factory AccountCache.fromJson(Map<String, dynamic> j) => AccountCache(
     wallet: j['wallet'] == null
@@ -309,5 +440,22 @@ class AccountCache {
     electricity: j['electricity'] == null
         ? null
         : Electricity.fromJson(Map<String, dynamic>.from(j['electricity'])),
+    walletHistory: (j['walletHistory'] as List? ?? [])
+        .map((x) => WalletSnapshot.fromJson(Map<String, dynamic>.from(x)))
+        .toList(),
+    electricityHistory: (j['electricityHistory'] as List? ?? [])
+        .map((x) => ElectricitySnapshot.fromJson(Map<String, dynamic>.from(x)))
+        .toList(),
+    monthlyBills: (j['monthlyBills'] as Map? ?? {}).map(
+      (k, v) => MapEntry(
+        k as String,
+        BillPage.fromJson(Map<String, dynamic>.from(v)),
+      ),
+    ),
   );
+}
+
+/// 有时间戳的数据点共用接口，供图表组件使用。
+abstract class DateTimeStamped {
+  DateTime get timestamp;
 }

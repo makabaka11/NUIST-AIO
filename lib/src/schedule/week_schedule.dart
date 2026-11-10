@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 
 import '../app_state.dart';
 import 'schedule.dart';
@@ -87,9 +87,10 @@ class _WeekScheduleState extends State<WeekSchedule> {
             final gutter = 48.0 * scale,
                 header = 52.0 * scale,
                 rowHeight = 72.0 * scale,
-                // 每个课程块（泳道）的最小宽度：保证课程名可正常显示。
-                // 同一天时间重叠的课程越多，整周视图越宽，配合横向滑动。
-                laneWidth = 64.0 * scale;
+                    // 每个课程块（泳道）的最小宽度：保证课程名可正常显示。
+                    // 同一天时间重叠的课程越多，整周视图越宽，配合横向滑动。
+                    laneWidth =
+                    64.0 * scale;
             final active = schedule.courses
                 .where((c) => c.weeks.contains(week))
                 .toList();
@@ -206,7 +207,6 @@ class _WeekScheduleState extends State<WeekSchedule> {
           },
         ),
         const SizedBox(height: 10),
-        const Text('左右滑动查看整周；点击课程可编辑或删除。本周未安排的课程不显示，不同周次的教室变化会分别呈现。'),
       ],
     );
   }
@@ -311,13 +311,14 @@ class _WeekScheduleState extends State<WeekSchedule> {
                         course.name,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: (compact
-                                ? Theme.of(context).textTheme.labelMedium
-                                : Theme.of(context).textTheme.labelLarge)
-                            ?.copyWith(
-                              color: scheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style:
+                            (compact
+                                    ? Theme.of(context).textTheme.labelMedium
+                                    : Theme.of(context).textTheme.labelLarge)
+                                ?.copyWith(
+                                  color: scheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
                       ),
                     ),
                     const SizedBox(height: 5),

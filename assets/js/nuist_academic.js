@@ -47,6 +47,13 @@ try {
     if(!Array.isArray(r)||Number(d.totalSize)>r.length)throw Error('考试安排返回不完整，请通过原网页核对。');
     return {ok:true,rows:r.map(x=>pick(x,['KCM','KCH','KSMC','KSRQ','KSSJMS','KSKSSJ','KSJSSJ','JASMC','JXLMC','XXXQMC','ZWH','BZ','SFAPSJ_DISPLAY','SFXYAPKS_DISPLAY']))};
   }
+  if(task==='studentProfile') {
+    const d=await data('sys/byshapp/api/grbg/queryXsjbxx.do','queryXsjbxx');
+    const j=d.jbxx;
+    const text=v=>typeof v==='string'||typeof v==='number'?String(v).trim().slice(0,120):'';
+    if(!j||!text(j.XM)||!text(j.XH))throw Error('未读取到学生基本资料，请在学业监测原网页核实。');
+    return {ok:true,profile:{name:text(j.XM),studentNumber:text(j.XH),college:text(j.YXDM_DISPLAY),major:text(j.ZYDM_DISPLAY),grade:text(j.XZNJ_DISPLAY),className:text(j.BJDM_DISPLAY)}};
+  }
   if(task==='creditPlans') {
     const d=await data('sys/byshapp/api/grbg/queryXsjbxx.do','queryXsjbxx');
     if(!Array.isArray(d.faArr))throw Error('尚无培养方案，请查看原网页。');

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+
+import '../campus_ui.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -156,6 +158,9 @@ class _LoginPageState extends State<LoginPage>
                   EmptyCard(
                     icon: Icons.verified_user_outlined,
                     title: '校园账号已连接',
+                    loading:
+                        widget.initializeServices &&
+                        widget.state.connectingServices,
                     message: widget.initializeServices
                         ? widget.state.servicesNotice ?? '门户会话已保存。'
                         : '门户登录已完成，返回向导后将初始化各校园服务。',

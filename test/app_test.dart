@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_liquid_glass_nav_bar/flutter_liquid_glass_nav_bar.dart';
+import 'package:flutter_miuix/miuix.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -15,7 +16,7 @@ import 'package:nuist_aio/src/accounts/accounts.dart';
 import 'package:nuist_aio/src/accounts/accounts_page.dart';
 import 'package:nuist_aio/src/accounts/dorm_picker.dart';
 import 'package:nuist_aio/src/app_state.dart';
-import 'package:nuist_aio/src/auth/invite_codes.dart';
+import 'package:nuist_aio/src/widgets.dart';
 import 'package:nuist_aio/src/auth/session_store.dart';
 import 'package:nuist_aio/src/schedule/schedule.dart';
 
@@ -44,47 +45,10 @@ void main() {
     return state;
   }
 
-  test('invite codes validate case- and separator-insensitively', () {
-    expect(isValidInviteCode('DT9Q-59W8-TSPH-8TQZ'), isTrue);
-    expect(isValidInviteCode('dt9q59w8tsph8tqz'), isTrue);
-    expect(isValidInviteCode('dt9q 59w8 tsph 8tqz'), isTrue);
-    expect(isValidInviteCode('DT9Q-59W8-TSPH-8TQ1'), isFalse);
-    expect(isValidInviteCode('DT9Q-59W8-TSPH-8TQ'), isFalse);
-    expect(isValidInviteCode(''), isFalse);
-  });
-
-  testWidgets('invite code gate blocks first run then wizard follows', (
-    tester,
-  ) async {
-    await mount(tester, onboarded: false);
-    expect(find.text('信大AIO 内部测试'), findsOneWidget);
-    expect(find.text('校园日常，一站就好。'), findsNothing);
-    await tester.tap(find.text('完成注册'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('邀请码不正确。请核对后重试，或向开发者索取新的邀请码。'),
-      findsOneWidget,
-    );
-    await tester.enterText(find.byType(TextField), 'dt9q59w8tsph8tqz');
-    await tester.tap(find.text('完成注册'));
-    await tester.pumpAndSettle();
-    expect(find.text('校园日常，一站就好。'), findsOneWidget);
-    final restored = AppState();
-    await restored.load();
-    expect(restored.registered, isTrue);
-    expect(restored.onboarded, isFalse);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets(
     'first-run wizard can be completed without login and stays completed',
     (tester) async {
       await mount(tester, onboarded: false);
-      // 先通过内测邀请码注册，再进入正常的设置向导。
-      expect(find.text('信大AIO 内部测试'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'DT9Q-59W8-TSPH-8TQZ');
-      await tester.tap(find.text('完成注册'));
-      await tester.pumpAndSettle();
       expect(find.text('校园日常，一站就好。'), findsOneWidget);
       await tester.tap(find.text('开始设置'));
       await tester.pumpAndSettle();
@@ -109,6 +73,34 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('ui style switches between Material 3 and MIUIX nav bars', (
+    tester,
+  ) async {
+    final state = await mount(tester);
+    // 默认 Material 3 + 液态玻璃导航栏开启。
+    expect(state.uiStyle, UiStyle.material3);
+    expect(find.byType(LiquidGlassNavBar), findsOneWidget);
+    expect(find.byType(MiuixNavigationBar), findsNothing);
+    // 切换到 MIUIX：导航栏换成 MiuixNavigationBar，液态玻璃不再渲染。
+    await state.setUiStyle(UiStyle.miuix);
+    await tester.pumpAndSettle();
+    expect(find.byType(MiuixNavigationBar), findsOneWidget);
+    expect(find.byType(LiquidGlassNavBar), findsNothing);
+    // MIUIX 模式下页签仍可通过文本切换，且切换后能安定（无无限动画）。
+    await tester.tap(find.text('学习'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MiuixNavigationBar), findsOneWidget);
+    // 切回 Material 3，液态玻璃导航栏恢复。
+    await state.setUiStyle(UiStyle.material3);
+    await tester.pumpAndSettle();
+    expect(find.byType(LiquidGlassNavBar), findsOneWidget);
+    // 持久化生效。
+    final restored = AppState();
+    await restored.load();
+    expect(restored.uiStyle, UiStyle.material3);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'home uses the authenticated display name and restores it securely',
@@ -153,8 +145,8 @@ void main() {
     expect(find.text('校园卡').hitTestable(), findsNothing);
     await tester.tap(find.text('图书馆').hitTestable());
     await tester.pumpAndSettle();
-    expect(find.text('入口已预留，具体功能将在后续版本接入。'), findsOneWidget);
-    await tester.tap(find.text('知道了'));
+    expect(find.text('连接图书馆账户'), findsOneWidget);
+    Navigator.of(tester.element(find.text('连接图书馆账户'))).pop();
     await tester.pumpAndSettle();
     await tester.tap(find.text('我的').last);
     await tester.pumpAndSettle();
@@ -238,6 +230,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('示例课程 · 高等数学').hitTestable(), findsOneWidget);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'floating glass reserves only its actual height at the end of scrollable pages',
+    (tester) async {
+      final state = await mount(tester);
+      addTearDown(state.dispose);
+      addTearDown(tester.view.resetPadding);
+      for (final size in [const Size(412, 915), const Size(1000, 800)]) {
+        tester.view.physicalSize = size;
+        tester.view.padding = FakeViewPadding(
+          bottom: size.width < 500 ? 34 : 0,
+        );
+        await tester.pumpAndSettle();
+        final nav = find.byType(LiquidGlassNavBar);
+        expect(tester.getSize(nav).height, lessThan(120));
+        for (final tab in ['首页', '学习', '功能', '我的']) {
+          await tester.tap(find.text(tab).last);
+          await tester.pumpAndSettle();
+          final page = find.byType(PageBody).hitTestable().first;
+          final padding = MediaQuery.paddingOf(tester.element(page)).bottom;
+          expect(
+            padding,
+            lessThan(120),
+            reason:
+                '$tab should reserve only the floating bar, not the viewport',
+          );
+          final scrollable = find
+              .descendant(of: page, matching: find.byType(Scrollable))
+              .first;
+          final position = tester.state<ScrollableState>(scrollable).position;
+          position.jumpTo(position.maxScrollExtent);
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+        }
+      }
     },
   );
 

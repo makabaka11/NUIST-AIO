@@ -1,5 +1,44 @@
 /// Shared policy for visible and background school SSO pages.
 class SchoolNavigation {
+  static final portalCasEntry = Uri.https(
+    'authserver.nuist.edu.cn',
+    '/authserver/login',
+    {'service': 'https://i.nuist.edu.cn/login#/'},
+  );
+  static bool portalCalendar(Uri? uri) =>
+      trusted(uri, {'i.nuist.edu.cn', 'authserver.nuist.edu.cn'});
+  static final vpnEntry = Uri.parse(
+    'https://client.vpn.nuist.edu.cn/enlink/#/client/app',
+  );
+  static final vpnCasEntry = Uri.https(
+    'authserver.nuist.edu.cn',
+    '/authserver/login',
+    {
+      'service':
+          'https://client.vpn.nuist.edu.cn/enlink/api/client/callback/cas',
+    },
+  );
+  static bool vpn(Uri? uri) =>
+      trusted(uri, {'authserver.nuist.edu.cn', 'client.vpn.nuist.edu.cn'});
+  // Observed gateway relay needed before a proxied resource receives its session.
+  static bool vpnResourceAuth(Uri? uri) =>
+      trusted(uri, {'client.vpn.nuist.edu.cn'}) &&
+          {
+            '/enlink/sso/login',
+            '/engateway/api/sso/authorized',
+            '/enlink/',
+            '/enlink/api/client/callback/cas',
+          }.contains(uri!.path) ||
+      trusted(uri, {'authserver.nuist.edu.cn'}) &&
+          uri!.path.startsWith('/authserver/');
+  // Begin at the relying party so its own CAS/CSRF context is established.
+  static final libraryCasEntry = Uri.https(
+    'elib.nuist.edu.cn',
+    '/meta-local/opac/cas/rosetta',
+  );
+  static bool library(Uri? uri) =>
+      trusted(uri, {'elib.nuist.edu.cn', 'authserver.nuist.edu.cn'});
+  static bool bulletin(Uri? uri) => trusted(uri, {'bulletin.nuist.edu.cn'});
   static final cardEntry = Uri.https(
     'icard.nuist.edu.cn',
     '/berserker-auth/cas/login/wisedu',

@@ -5,10 +5,23 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 import java.io.File
+import android.content.Intent
+import android.net.Uri
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nuistaio/chaoxing")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "openItem") { result.notImplemented(); return@setMethodCallHandler }
+                val opened = runCatching {
+                    val uri = Uri.parse(call.arguments as? String ?: "")
+                    require(uri.scheme == "https" && uri.host in setOf("mooc1.chaoxing.com", "mooc1-api.chaoxing.com", "mooc2-ans.chaoxing.com") && uri.userInfo == null && (uri.port == -1 || uri.port == 443))
+                    startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage("com.chaoxing.mobile"))
+                    true
+                }.getOrDefault(false)
+                result.success(opened)
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nuistaio/sso_diagnostics")
             .setMethodCallHandler { call, result ->
                 // Only the diagnostic Dart build invokes this private channel.

@@ -116,7 +116,10 @@ void main() {
         expect(ids, contains(dep));
       }
       if (site.entry != null) {
-        expect(site.entry!.scheme, 'https');
+        expect(
+          site.entry!.scheme,
+          site.browserOnly ? isIn(['https', 'http']) : 'https',
+        );
         expect(site.entry!.host, site.host);
       }
       for (final feature in site.features) {
@@ -125,12 +128,22 @@ void main() {
           isTrue,
           reason: 'Duplicate feature ${feature.id}',
         );
-        if (feature.implemented) expect(site.auth, isNot(SiteAuth.unverified));
+        if (feature.implemented && !site.browserOnly && !feature.browserOnly) {
+          expect(site.auth, isNot(SiteAuth.unverified));
+        }
         if (feature.entry != null) {
           expect(Uri.parse(feature.entry!).host, site.host);
-          expect(site.navigation!(Uri.parse(feature.entry!)), isTrue);
-          expect(feature.readySelector, isNotEmpty);
+          if (!site.browserOnly && !feature.browserOnly) {
+            expect(site.navigation!(Uri.parse(feature.entry!)), isTrue);
+            expect(feature.readySelector, isNotEmpty);
+          }
         }
+      }
+      if (site.browserOnly) {
+        expect(site.asset, isNull);
+        expect(site.probeTask, isNull);
+        expect(site.navigation, isNull);
+        expect(site.automatic, false);
       }
       if (site.auth == SiteAuth.unverified) expect(site.automatic, isFalse);
       if (site.automatic) {

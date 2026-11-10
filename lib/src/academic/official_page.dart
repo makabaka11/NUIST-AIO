@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -10,8 +10,7 @@ Future<void> launchSchoolBrowser(BuildContext context, Uri uri) async {
     if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
   } catch (_) {}
   if (context.mounted) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('无法打开浏览器，请检查默认浏览器设置。')));
+    showCampusSnackBar(context, const SnackBar(content: Text('无法打开浏览器，请检查默认浏览器设置。')));
   }
 }
 

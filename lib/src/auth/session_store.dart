@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import '../library/library.dart';
+
 import '../schedule/schedule.dart';
+import '../profile/student_profile.dart';
 import '../accounts/accounts.dart';
 
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -9,6 +12,67 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Native WebView owns the active cookie jar. This encrypted snapshot is not
 /// restored into broader cookie domains or sent by a Dart HTTP client.
 class SessionStore {
+  static const _libraryKey = 'nuist.library.loans.v1';
+  Future<LibraryLoans?> readLibrary() async {
+    final raw = await _secure.read(key: _libraryKey);
+    if (raw == null) return null;
+    final j = jsonDecode(raw) as Map;
+    if (j['owner'] != await accountKey() || j['owner'] == null) return null;
+    return LibraryLoans.fromJson(Map<String, dynamic>.from(j['loans'] as Map));
+  }
+
+  Future<void> saveLibrary(LibraryLoans value) async {
+    final owner = await accountKey();
+    if (owner == null) return;
+    await _secure.write(
+      key: _libraryKey,
+      value: jsonEncode({'owner': owner, 'loans': value.toJson()}),
+    );
+  }
+
+  Future<void> clearLibrary() => _secure.delete(key: _libraryKey);
+  static const _profileKey = 'nuist.student.profile.v1';
+  static const _avatarColorKey = 'nuist.avatar.color.v1';
+  static const _avatarOwnerKey = 'nuist.avatar.owner.v1';
+  Future<String?> avatarOwner() => _secure.read(key: _avatarOwnerKey);
+  Future<void> saveAvatarOwner(String owner) =>
+      _secure.write(key: _avatarOwnerKey, value: owner);
+  static const _pendingAvatarKey = 'nuist.avatar.pending.v1';
+  Future<StudentProfile?> readProfile() async {
+    final raw = await _secure.read(key: _profileKey);
+    if (raw == null) return null;
+    final data = jsonDecode(raw) as Map<String, dynamic>;
+    final owner = await accountKey();
+    if (owner == null || data['owner'] != owner) return null;
+    return StudentProfile.fromJson(
+      Map<String, dynamic>.from(data['profile'] as Map),
+    );
+  }
+
+  Future<void> saveProfile(StudentProfile profile) async => _secure.write(
+    key: _profileKey,
+    value: jsonEncode({
+      'owner': await accountKey(),
+      'profile': profile.toJson(),
+    }),
+  );
+  Future<void> clearProfile() async {
+    await _secure.delete(key: _profileKey);
+    await _secure.delete(key: _avatarOwnerKey);
+    await _secure.delete(key: _avatarColorKey);
+    await _secure.delete(key: _pendingAvatarKey);
+  }
+
+  Future<int?> avatarColor() async =>
+      int.tryParse(await _secure.read(key: _avatarColorKey) ?? '');
+  Future<void> saveAvatarColor(int color) =>
+      _secure.write(key: _avatarColorKey, value: color.toString());
+  Future<String?> accountKey() async =>
+      (await _readPortal())?['accountKey'] as String?;
+  Future<String?> pendingAvatar() => _secure.read(key: _pendingAvatarKey);
+  Future<void> markPendingAvatar(String? owner) => owner == null
+      ? _secure.delete(key: _pendingAvatarKey)
+      : _secure.write(key: _pendingAvatarKey, value: owner);
   static const _accountsKey = 'nuist.accounts.v1';
   static const _dormKey = 'nuist.dorm.v1';
   Future<AccountCache> readAccounts() async {

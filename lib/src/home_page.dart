@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+import 'campus_ui.dart';
 
 import 'app_state.dart';
-import 'accounts/accounts.dart';
-import 'accounts/accounts_page.dart';
+import 'dashboard/dashboard_widgets.dart';
 import 'schedule/schedule_widgets.dart';
 import 'widgets.dart';
 
@@ -19,16 +18,6 @@ class CampusHomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final wallet = state.accounts.wallet;
-    final bill = state.accounts.currentBills?.month == currentMonth()
-        ? state.accounts.currentBills
-        : null;
-    final power = state.accounts.electricity?.dormKey == state.dorm?.key
-        ? state.accounts.electricity
-        : null;
-    String updated(DateTime? date) => date == null
-        ? '尚未同步'
-        : '缓存 · ${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
     final hour = DateTime.now().hour;
     final greeting = hour < 6
         ? '夜深了'
@@ -94,8 +83,9 @@ class CampusHomePage extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child: LoadingText(
                     state.servicesNotice!,
+                    loading: state.connectingServices,
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                 ),
@@ -120,100 +110,7 @@ class CampusHomePage extends StatelessWidget {
               ),
             ),
           ),
-        SectionTitle(
-          '校园账户',
-          trailing: TextButton.icon(
-            onPressed: () => openAccounts(context, state, autoSync: true),
-            icon: const Icon(Icons.sync, size: 18),
-            label: const Text('同步'),
-          ),
-        ),
-        LayoutBuilder(
-          builder: (context, box) => Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final item in [
-                (
-                  Icons.local_library_outlined,
-                  '图书借阅',
-                  '— 册',
-                  '借阅与归还提醒',
-                  () => showPendingFeature(context, '图书借阅'),
-                ),
-                (
-                  Icons.bolt_outlined,
-                  '宿舍电费',
-                  power?.display ?? '—',
-                  state.dorm == null ? '先选择实际宿舍' : updated(power?.updatedAt),
-                  () => openAccounts(
-                    context,
-                    state,
-                    section: AccountSection.electricity,
-                  ),
-                ),
-                (
-                  Icons.credit_card_outlined,
-                  '校园卡余额',
-                  wallet == null || wallet.cards.isEmpty
-                      ? '¥ —'
-                      : '¥ ${money(wallet.balance)}',
-                  wallet == null ? '电子账户余额' : updated(wallet.updatedAt),
-                  () => openAccounts(context, state),
-                ),
-                (
-                  Icons.bar_chart_outlined,
-                  '本月支出',
-                  bill == null ? '¥ —' : '¥ ${money(bill.expensesCents)}',
-                  updated(bill?.updatedAt),
-                  () => openAccounts(
-                    context,
-                    state,
-                    section: AccountSection.bills,
-                  ),
-                ),
-              ])
-                SizedBox(
-                  width: box.maxWidth < 280
-                      ? box.maxWidth
-                      : (box.maxWidth - 12) / 2,
-                  child: Card(
-                    color: colors.surfaceContainerLow,
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: item.$5,
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(item.$1, color: colors.primary, size: 26),
-                            const SizedBox(height: 14),
-                            Text(
-                              item.$2,
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              item.$3,
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(color: colors.onSurface),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              item.$4,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: colors.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+        DashboardWidgets(state: state),
         const SizedBox(height: 18),
         Wrap(
           spacing: 8,

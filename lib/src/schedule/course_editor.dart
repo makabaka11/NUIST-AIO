@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 
 import '../app_state.dart';
 import '../theme_settings.dart';
@@ -69,8 +69,7 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
   Future<void> save() async {
     if (busy || !form.currentState!.validate()) return;
     if (start > end) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('开始节次不能晚于结束节次。')));
+      showCampusSnackBar(context, const SnackBar(content: Text('开始节次不能晚于结束节次。')));
       return;
     }
     setState(() => busy = true);

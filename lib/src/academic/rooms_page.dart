@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 
 import '../app_state.dart';
 import '../auth/login_page.dart';
@@ -435,8 +435,6 @@ class _RoomAvailabilityPageState extends State<RoomAvailabilityPage> {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
-            const Text('每行一间教室，每格一个大节。点格子查看逐节状态；空闲不代表可以预约或自由使用。'),
             if (busy)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),

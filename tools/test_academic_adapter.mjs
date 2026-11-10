@@ -79,3 +79,9 @@ test('shared native wrapper is valid JS and serializes integer values before pla
   const value=await vm.runInNewContext(`(async()=>{${wrapped}})()`);
   assert.equal(typeof value,'string');assert.deepEqual(JSON.parse(value),{ok:true,number:60,zero:0,fraction:3.5});
 });
+test('student profile exports only verified display fields and requires a student identity',async()=>{
+  const {value,calls}=await run('studentProfile',{},()=>({jbxx:{XM:' 测试姓名 ',XH:'00001234',YXDM_DISPLAY:'测试学院',ZYDM_DISPLAY:'测试专业',XZNJ_DISPLAY:'2024级',BJDM_DISPLAY:'测试班',WID:'PRIVATE',XSBH:'PRIVATE',YJBYRQ:'PRIVATE'},faArr:[]}));
+  assert.deepEqual(value.profile,{name:'测试姓名',studentNumber:'00001234',college:'测试学院',major:'测试专业',grade:'2024级',className:'测试班'});
+  assert.equal(JSON.stringify(value).includes('PRIVATE'),false);assert.equal(calls.length,1);assert.ok(calls[0].path.endsWith('/queryXsjbxx.do'));
+  for(const jbxx of [null,{}, {XM:'测试姓名'}])assert.equal((await run('studentProfile',{},()=>({jbxx}))).value.ok,false);
+});

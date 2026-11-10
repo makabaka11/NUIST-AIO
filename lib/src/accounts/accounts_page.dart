@@ -2,7 +2,8 @@ import '../services/script_result.dart';
 
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -12,6 +13,8 @@ import '../widgets.dart';
 import '../webview_page_lifecycle.dart';
 import '../services/navigation.dart';
 import 'accounts.dart';
+import 'charts.dart';
+import 'reports.dart';
 import 'dorm_picker.dart';
 
 enum AccountSection { card, bills, electricity }
@@ -83,6 +86,12 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
   String? error;
   String month = currentMonth(), pending = 'sync';
   int page = 1;
+  // 图表交互状态
+  TimeRange walletRange = TimeRange.days30;
+  TimeRange electricityRange = TimeRange.days30;
+  int? selectedMonthBar; // 月度消费柱状图选中索引
+  bool showFullYear = false; // 月度消费：半年/一年
+  String billFilter = '全部'; // 交易流水筛选：全部/消费/充值/退款
   bool get supported => widget.state.cardSession.available;
   Future<Map<String, dynamic>> script(String task) async {
     final url = await controller?.getUrl();
@@ -446,136 +455,10 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
           ],
         ),
         const SizedBox(height: 20),
-        if (section == AccountSection.card) ...[
-          if (cache.wallet == null)
-            EmptyCard(
-              icon: Icons.credit_card_outlined,
-              title: '连接校园卡',
-              message: '从学校一卡通同步电子账户余额，查询结果仅保存在本机。',
-              action: FilledButton(
-                onPressed: busy ? null : () => begin('sync'),
-                child: const Text('连接并同步'),
-              ),
-            )
-          else if (cache.wallet!.cards.isEmpty)
-            const EmptyCard(
-              icon: Icons.credit_card_off_outlined,
-              title: '暂无可用卡账户',
-              message: '学校接口未返回卡包，请检查一卡通账号。',
-            )
-          else ...[
-            for (final card in cache.wallet!.cards)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Card(
-                  color: colors.primaryContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          card.label,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text('电子账户余额'),
-                        const SizedBox(height: 8),
-                        Text(
-                          '¥ ${money(card.electronicCents)}',
-                          style: Theme.of(context).textTheme.headlineLarge,
-                        ),
-                        const SizedBox(height: 16),
-                        Text('卡片账户余额（含待结算）：¥ ${money(card.physicalCents)}'),
-                        if (card.lost || card.frozen)
-                          Text(
-                            [
-                              if (card.lost) '已挂失',
-                              if (card.frozen) '已冻结',
-                            ].join(' · '),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            stamp(cache.wallet!.updatedAt),
-            FilledButton.tonalIcon(
-              onPressed: busy ? null : () => begin('wallet'),
-              icon: const Icon(Icons.sync),
-              label: const Text('更新余额'),
-            ),
-          ],
-        ],
+        if (section == AccountSection.card) ...cardBody(context, cache, colors),
         if (section == AccountSection.bills) ...billBody(context),
         if (section == AccountSection.electricity) ...[
-          Card(
-            color: colors.surfaceContainerLow,
-            child: ListTile(
-              leading: const Icon(Icons.apartment_outlined),
-              title: const Text('实际宿舍'),
-              subtitle: Text(widget.state.dorm?.label ?? '尚未选择宿舍'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: busy ? null : dormPicker,
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (widget.state.dorm == null)
-            EmptyCard(
-              icon: Icons.bolt_outlined,
-              title: '先选择宿舍',
-              message: '根据学校目录选择服务范围、园区、楼栋和房间。',
-              action: FilledButton(
-                onPressed: dormPicker,
-                child: const Text('选择宿舍'),
-              ),
-            )
-          else if (cache.electricity == null ||
-              cache.electricity!.dormKey != widget.state.dorm!.key)
-            EmptyCard(
-              icon: Icons.bolt_outlined,
-              title: '还没有电费数据',
-              message: '已保存宿舍，连接一卡通后可读取当前余量。',
-              action: FilledButton(
-                onPressed: busy ? null : () => begin('electricity'),
-                child: const Text('查询所选宿舍'),
-              ),
-            )
-          else ...[
-            Card(
-              color: colors.secondaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      cache.electricity!.primary.key,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      cache.electricity!.display,
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    for (final entry in cache.electricity!.fields.entries.where(
-                      (e) => e.key != cache.electricity!.primary.key,
-                    ))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text('${entry.key}：${entry.value}'),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            stamp(cache.electricity!.updatedAt),
-            FilledButton.tonalIcon(
-              onPressed: busy ? null : () => begin('electricity'),
-              icon: const Icon(Icons.sync),
-              label: const Text('更新电费'),
-            ),
-          ],
+          electricityBody(context, cache, colors),
         ],
         const SizedBox(height: 24),
         Text(
@@ -586,16 +469,458 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
     );
   }
 
-  Widget stamp(DateTime date) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    child: Text(
-      '更新于 ${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
-      style: Theme.of(context).textTheme.bodySmall,
-    ),
-  );
+  // ─────────────── 校园卡 ───────────────
+
+  List<Widget> cardBody(
+    BuildContext context,
+    AccountCache cache,
+    ColorScheme colors,
+  ) {
+    if (cache.wallet == null) {
+      return [
+        EmptyCard(
+          icon: Icons.credit_card_outlined,
+          title: '连接校园卡',
+          message: '从学校一卡通同步电子账户余额，查询结果仅保存在本机。',
+          action: FilledButton(
+            onPressed: busy ? null : () => begin('sync'),
+            child: const Text('连接并同步'),
+          ),
+        ),
+      ];
+    }
+    if (cache.wallet!.cards.isEmpty) {
+      return [
+        const EmptyCard(
+          icon: Icons.credit_card_off_outlined,
+          title: '暂无可用卡账户',
+          message: '学校接口未返回卡包，请检查一卡通账号。',
+        ),
+      ];
+    }
+    final card = cache.wallet!.cards.first;
+    final balance = card.electronicCents;
+    final updated = cache.wallet!.updatedAt;
+    return [
+      // 余额渐变卡片
+      Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              colors.primaryContainer,
+              colors.primaryContainer.withValues(alpha: 0.7),
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.credit_card,
+                    color: colors.onPrimaryContainer,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '校园卡余额',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: colors.onPrimaryContainer.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.onPrimaryContainer.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '本人校园卡',
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: colors.onPrimaryContainer),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '¥ ${money(balance)}',
+                key: const ValueKey('wallet-current-balance'),
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  color: colors.onPrimaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '采集于 ${updated.month}-${updated.day.toString().padLeft(2, '0')} ${updated.hour.toString().padLeft(2, '0')}:${updated.minute.toString().padLeft(2, '0')}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colors.onPrimaryContainer.withValues(alpha: 0.7),
+                ),
+              ),
+              if (card.lost || card.frozen) ...[
+                const SizedBox(height: 8),
+                Text(
+                  [if (card.lost) '已挂失', if (card.frozen) '已冻结'].join(' · '),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colors.onPrimaryContainer.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 20),
+      // 余额曲线
+      _SectionCard(
+        icon: Icons.show_chart,
+        title: '余额曲线',
+        unit: '元',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _RangeTabs(
+              ranges: const [
+                TimeRange.days7,
+                TimeRange.days30,
+                TimeRange.days90,
+                TimeRange.all,
+              ],
+              selected: walletRange,
+              color: colors.primary,
+              onSelected: (r) => setState(() => walletRange = r),
+            ),
+            const SizedBox(height: 12),
+            BalanceHistoryReport(
+              snapshots: cache.walletHistory,
+              range: walletRange,
+              color: colors.primary,
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      // 每月消费
+      _SectionCard(
+        icon: Icons.bar_chart_outlined,
+        title: '每月消费',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Spacer(),
+                _TogglePill(
+                  left: '半年',
+                  right: '一年',
+                  isRight: showFullYear,
+                  color: colors.tertiary,
+                  onToggle: (v) => setState(() {
+                    showFullYear = v;
+                    selectedMonthBar = null;
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            MonthlySpendingReport(
+              months: _monthlySpending(cache, showFullYear ? 12 : 6),
+              selectedIndex: selectedMonthBar,
+              onSelected: (i) => setState(() => selectedMonthBar = i),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: busy ? null : () => begin('wallet'),
+              icon: const Icon(Icons.sync),
+              label: const Text('更新余额'),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// 从 monthlyBills 缓存提取最近 N 个月的消费汇总。
+  List<MonthlySpending> _monthlySpending(AccountCache cache, int count) {
+    final now = chinaNow();
+    final result = <MonthlySpending>[];
+    for (int i = count - 1; i >= 0; i--) {
+      final dt = DateTime(now.year, now.month - i);
+      final key = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+      final bill = cache.monthlyBills[key];
+      result.add(
+        MonthlySpending(
+          key,
+          bill?.expensesCents ?? 0,
+          bill?.incomeCents ?? 0,
+          bill?.total ?? 0,
+          hasData: bill != null,
+        ),
+      );
+    }
+    return result;
+  }
+
+  // ─────────────── 电费 ───────────────
+
+  Widget electricityBody(
+    BuildContext context,
+    AccountCache cache,
+    ColorScheme colors,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          color: colors.surfaceContainerLow,
+          child: ListTile(
+            leading: const Icon(Icons.apartment_outlined),
+            title: const Text('实际宿舍'),
+            subtitle: Text(widget.state.dorm?.label ?? '尚未选择宿舍'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: busy ? null : dormPicker,
+          ),
+        ),
+        const SizedBox(height: 20),
+        if (widget.state.dorm == null)
+          EmptyCard(
+            icon: Icons.bolt_outlined,
+            title: '先选择宿舍',
+            message: '根据学校目录选择服务范围、园区、楼栋和房间。',
+            action: FilledButton(
+              onPressed: dormPicker,
+              child: const Text('选择宿舍'),
+            ),
+          )
+        else if (cache.electricity == null ||
+            cache.electricity!.dormKey != widget.state.dorm!.key)
+          EmptyCard(
+            icon: Icons.bolt_outlined,
+            title: '还没有电费数据',
+            message: '已保存宿舍，连接一卡通后可读取当前余量。',
+            action: FilledButton(
+              onPressed: busy ? null : () => begin('electricity'),
+              child: const Text('查询所选宿舍'),
+            ),
+          )
+        else ...[
+          // 大号电量卡片
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: colors.secondaryContainer,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cache.electricity!.primary.key,
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(color: colors.onSecondaryContainer),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    cache.electricity!.display,
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colors.onSecondaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    cache.electricity!.status,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSecondaryContainer.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  for (final entry in cache.electricity!.fields.entries.where(
+                    (e) => e.key != cache.electricity!.primary.key,
+                  ))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '${entry.key}：${entry.value}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSecondaryContainer.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // 电量趋势
+          _SectionCard(
+            icon: Icons.trending_down_outlined,
+            title: '电量趋势',
+            unit: cache.electricity!.unit,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _RangeTabs(
+                  ranges: const [
+                    TimeRange.days7,
+                    TimeRange.days30,
+                    TimeRange.days90,
+                    TimeRange.year1,
+                    TimeRange.all,
+                  ],
+                  selected: electricityRange,
+                  color: colors.primary,
+                  onSelected: (r) => setState(() => electricityRange = r),
+                ),
+                const SizedBox(height: 12),
+                _electricityStats(context, cache, colors),
+                const SizedBox(height: 12),
+                ElectricityTrendChart(
+                  snapshots: cache.electricityHistory,
+                  range: electricityRange,
+                  color: colors.primary,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '最近采集 ${cache.electricity!.updatedAt.toLocal().toString().substring(0, 16)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: busy ? null : () => begin('electricity'),
+                  icon: const Icon(Icons.sync),
+                  label: const Text('更新电费'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          // 采集记录
+          _SectionCard(
+            icon: Icons.history_outlined,
+            title: '采集记录',
+            trailing: Text(
+              '最近 ${cache.electricityHistory.length.clamp(0, 20)} 次',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: colors.onSurfaceVariant),
+            ),
+            child: _electricityRecords(context, cache, colors),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _electricityStats(
+    BuildContext context,
+    AccountCache cache,
+    ColorScheme colors,
+  ) {
+    final hist = cache.electricityHistory;
+    final cutoff = electricityRange.cutoff;
+    final now = DateTime.now();
+    final points = hist
+        .where((s) => cutoff == null || now.difference(s.timestamp) <= cutoff)
+        .toList();
+    if (points.length < 2) return const SizedBox.shrink();
+    final delta = points.last.value - points.first.value;
+    return Wrap(
+      spacing: 24,
+      runSpacing: 12,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('区间采集', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '${points.length} 次',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('区间余额变化', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(2)} ${points.first.unit}',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(color: colors.primary),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _electricityRecords(
+    BuildContext context,
+    AccountCache cache,
+    ColorScheme colors,
+  ) {
+    final hist = cache.electricityHistory.reversed.take(20).toList();
+    if (hist.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          '暂无采集记录',
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: colors.onSurfaceVariant),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final s in hist) ...[
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              '${s.timestamp.month}-${s.timestamp.day.toString().padLeft(2, '0')} '
+              '${s.timestamp.hour.toString().padLeft(2, '0')}:${s.timestamp.minute.toString().padLeft(2, '0')}',
+            ),
+            subtitle: Text(s.status),
+            trailing: Text(
+              '${s.value.toStringAsFixed(2)} ${s.unit}',
+              style: Theme.of(context).textTheme.labelMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (s != hist.last)
+            Divider(
+              height: 1,
+              color: colors.outlineVariant.withValues(alpha: 0.3),
+            ),
+        ],
+      ],
+    );
+  }
+
+  // ─────────────── 账单 ───────────────
+
   List<Widget> billBody(BuildContext context) {
-    final bill = widget.state.accounts.bills;
-    final data = bill?.month == month && bill?.page == page ? bill : null;
+    final cache = widget.state.accounts;
+    final colors = Theme.of(context).colorScheme;
+    final bill = cache.bills?.month == month && cache.bills?.page == page
+        ? cache.bills
+        : cache.monthlyBills[month];
+    final data = bill?.page == page ? bill : null;
     final now = chinaNow();
     final months = [
       for (int i = 0; i < 24; i++)
@@ -603,6 +928,7 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
     ];
     if (!months.contains(month)) months.add(month);
     return [
+      // 月份选择
       DropdownButtonFormField<String>(
         initialValue: month,
         isExpanded: true,
@@ -617,6 +943,7 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                 setState(() {
                   month = value;
                   page = 1;
+                  billFilter = '全部';
                 });
                 await begin('bills');
               },
@@ -633,90 +960,371 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
           ),
         )
       else ...[
-        Card(
+        // 本月支出卡片
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                colors.tertiaryContainer,
+                colors.tertiaryContainer.withValues(alpha: 0.7),
+              ],
+            ),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Wrap(
-              spacing: 24,
-              runSpacing: 12,
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('支出 ¥ ${money(data.expensesCents)}'),
-                Text('收入 ¥ ${money(data.incomeCents)}'),
-                Text('共 ${data.total} 条'),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.bar_chart,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${data.month.substring(5)}月消费',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: colors.onTertiaryContainer.withValues(
+                          alpha: 0.9,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '¥ ${money(data.expensesCents)}',
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    color: colors.onTertiaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '学校接口月度汇总 · 共 ${data.total} 笔交易',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onTertiaryContainer.withValues(alpha: 0.7),
+                  ),
+                ),
               ],
             ),
           ),
         ),
-        stamp(data.updatedAt),
-        if (data.records.isEmpty) const Text('该月份暂无账单记录。'),
-        for (final record in data.records)
-          Card(
-            child: ListTile(
-              title: Text(record.description),
-              subtitle: Text('${record.time}\n${record.methodDisplay}'),
-              isThreeLine: true,
-              trailing: Text(
-                '¥ ${record.amount}',
-                style: TextStyle(
-                  color: record.income
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
-                ),
-              ),
-              onTap: () => showModalBottomSheet<void>(
-                context: context,
-                showDragHandle: true,
-                builder: (context) => SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          record.description,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 16),
-                        Text('¥ ${record.amount}'),
-                        const SizedBox(height: 12),
-                        Text(record.time),
-                        const SizedBox(height: 12),
-                        Text(record.methodDisplay),
-                      ],
-                    ),
+        const SizedBox(height: 20),
+        // 月度消费柱状图
+        _SectionCard(
+          icon: Icons.bar_chart_outlined,
+          title: '每月消费',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Spacer(),
+                  _TogglePill(
+                    left: '半年',
+                    right: '一年',
+                    isRight: showFullYear,
+                    color: colors.tertiary,
+                    onToggle: (v) => setState(() {
+                      showFullYear = v;
+                      selectedMonthBar = null;
+                    }),
                   ),
-                ),
+                ],
               ),
+              const SizedBox(height: 12),
+              MonthlySpendingReport(
+                months: _monthlySpending(cache, showFullYear ? 12 : 6),
+                selectedIndex: selectedMonthBar,
+                onSelected: (i) => setState(() => selectedMonthBar = i),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        // 消费去向
+        if (data.records
+            .where((r) => !r.income && r.directionKnown)
+            .isNotEmpty) ...[
+          _SectionCard(
+            icon: Icons.pie_chart_outline,
+            title: '消费去向',
+            trailing: Text(
+              '当前页前五',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: colors.onSurfaceVariant),
+            ),
+            child: SpendingBreakdown(
+              items: _spendingCategories(data),
+              color: colors.tertiary,
             ),
           ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            OutlinedButton(
-              onPressed: page <= 1 || busy
-                  ? null
-                  : () async {
-                      setState(() => page--);
-                      await begin('bills');
-                    },
-              child: const Text('上一页'),
-            ),
-            Text('$page / ${data.pages == 0 ? 1 : data.pages}'),
-            OutlinedButton(
-              onPressed: page >= data.pages || busy
-                  ? null
-                  : () async {
-                      setState(() => page++);
-                      await begin('bills');
-                    },
-              child: const Text('下一页'),
-            ),
-          ],
+          const SizedBox(height: 20),
+        ],
+        // 交易流水
+        _SectionCard(
+          icon: Icons.receipt_long_outlined,
+          title: '交易流水',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 筛选标签
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final f in ['全部', '消费', '收入', '待确认'])
+                    ChoiceChip(
+                      label: Text(f),
+                      selected: billFilter == f,
+                      onSelected: (_) => setState(() => billFilter = f),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_filteredRecords(data).isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    '该筛选条件下暂无记录。',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: colors.onSurfaceVariant),
+                  ),
+                )
+              else
+                for (final record in _filteredRecords(data)) ...[
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      record.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '${record.time}\n${record.methodDisplay}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    isThreeLine: true,
+                    trailing: Text(
+                      '¥ ${record.amount}',
+                      style: TextStyle(
+                        color: record.income ? colors.primary : colors.tertiary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onTap: () => showModalBottomSheet<void>(
+                      context: context,
+                      showDragHandle: true,
+                      builder: (context) => SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                record.description,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 16),
+                              Text('¥ ${record.amount}'),
+                              const SizedBox(height: 12),
+                              Text(record.time),
+                              const SizedBox(height: 12),
+                              Text(record.methodDisplay),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (record != _filteredRecords(data).last)
+                    Divider(
+                      height: 1,
+                      color: colors.outlineVariant.withValues(alpha: 0.3),
+                    ),
+                ],
+              // 分页
+              if (data.pages > 1) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    OutlinedButton(
+                      onPressed: page <= 1 || busy
+                          ? null
+                          : () async {
+                              setState(() => page--);
+                              await begin('bills');
+                            },
+                      child: const Text('上一页'),
+                    ),
+                    Text('$page / ${data.pages}'),
+                    OutlinedButton(
+                      onPressed: page >= data.pages || busy
+                          ? null
+                          : () async {
+                              setState(() => page++);
+                              await begin('bills');
+                            },
+                      child: const Text('下一页'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     ];
   }
+
+  List<BillRecord> _filteredRecords(BillPage data) {
+    switch (billFilter) {
+      case '消费':
+        return data.records
+            .where((r) => !r.income && r.directionKnown)
+            .toList();
+      case '收入':
+        return data.records.where((r) => r.income && r.directionKnown).toList();
+      case '待确认':
+        return data.records.where((r) => !r.directionKnown).toList();
+      default:
+        return data.records;
+    }
+  }
+
+  /// 按描述聚合消费记录。
+  List<SpendingCategory> _spendingCategories(BillPage data) {
+    final map = <String, int>{};
+    for (final r in data.records) {
+      if (r.income || !r.directionKnown) continue;
+      map[r.description] = (map[r.description] ?? 0) + r.amountCents;
+    }
+    return map.entries.map((e) => SpendingCategory(e.key, e.value)).toList();
+  }
+}
+
+// ─────────────── 通用 UI 组件 ───────────────
+
+/// 带图标的分区卡片容器。
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    this.unit,
+    this.trailing,
+    required this.child,
+  });
+  final IconData icon;
+  final String title;
+  final String? unit;
+  final Widget? trailing;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      color: colors.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: colors.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      if (unit != null)
+                        Text(
+                          '· $unit',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                    ],
+                  ),
+                ),
+                ?trailing,
+              ],
+            ),
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 时间范围切换标签组。
+class _RangeTabs extends StatelessWidget {
+  const _RangeTabs({
+    required this.ranges,
+    required this.selected,
+    required this.color,
+    required this.onSelected,
+  });
+  final List<TimeRange> ranges;
+  final TimeRange selected;
+  final Color color;
+  final ValueChanged<TimeRange> onSelected;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: SegmentedButton<TimeRange>(
+      segments: [
+        for (final range in ranges)
+          ButtonSegment(value: range, label: Text(range.label)),
+      ],
+      selected: {selected},
+      showSelectedIcon: false,
+      onSelectionChanged: (values) => onSelected(values.single),
+    ),
+  );
+}
+
+/// 半年/一年 切换药丸。
+class _TogglePill extends StatelessWidget {
+  const _TogglePill({
+    required this.left,
+    required this.right,
+    required this.isRight,
+    required this.color,
+    required this.onToggle,
+  });
+  final String left, right;
+  final bool isRight;
+  final Color color;
+  final ValueChanged<bool> onToggle;
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<bool>(
+    segments: [
+      ButtonSegment(value: false, label: Text(left)),
+      ButtonSegment(value: true, label: Text(right)),
+    ],
+    selected: {isRight},
+    showSelectedIcon: false,
+    onSelectionChanged: (values) => onToggle(values.single),
+  );
 }

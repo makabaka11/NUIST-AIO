@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 
 import '../app_state.dart';
+import '../chaoxing/chaoxing_page.dart';
 import 'site_registry.dart';
 
 class ServiceInitializationPanel extends StatelessWidget {
@@ -38,74 +39,84 @@ class ServiceInitializationPanel extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           for (final site in sites)
-            Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (state.sitePhase(site) == SitePhase.connecting)
-                      const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Icon(
-                        switch (state.sitePhase(site)) {
-                          SitePhase.ready => Icons.check_circle_outline,
-                          SitePhase.failed => Icons.error_outline,
-                          SitePhase.planned => Icons.schedule_outlined,
-                          _ => Icons.radio_button_unchecked,
-                        },
-                        size: 22,
-                        color: state.sitePhase(site) == SitePhase.failed
-                            ? colors.error
-                            : colors.primary,
-                      ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            site.label,
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(switch (state.sitePhase(site)) {
-                            SitePhase.ready =>
-                              state.siteMessages[site.id] ?? '主账号会话已保存',
-                            SitePhase.connecting =>
-                              state.siteMessages[site.id] ?? '正在连接…',
-                            SitePhase.failed =>
-                              state.siteMessages[site.id] ?? '初始化未完成，请重试',
-                            SitePhase.planned => '待接入，暂不获取凭据',
-                            SitePhase.waiting =>
-                              state.connectedAt == null ? '等待主账号登录' : '等待初始化',
-                          }, style: Theme.of(context).textTheme.bodySmall),
-                          if (site.features.isNotEmpty) ...[
-                            const SizedBox(height: 6),
+            if (site.id == SchoolSiteId.chaoxing)
+              Card(child: ChaoxingAccountTile(state: state))
+            else
+              Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (state.sitePhase(site) == SitePhase.connecting)
+                        const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        Icon(
+                          switch (state.sitePhase(site)) {
+                            SitePhase.ready => Icons.check_circle_outline,
+                            SitePhase.failed => Icons.error_outline,
+                            SitePhase.planned => Icons.schedule_outlined,
+                            _ => Icons.radio_button_unchecked,
+                          },
+                          size: 22,
+                          color: state.sitePhase(site) == SitePhase.failed
+                              ? colors.error
+                              : colors.primary,
+                        ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              site.features
-                                  .map(
-                                    (f) => f.implemented
-                                        ? f.label
-                                        : '${f.label}（待接入）',
-                                  )
-                                  .join(' · '),
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: colors.onSurfaceVariant),
+                              site.label,
+                              style: Theme.of(context).textTheme.titleSmall,
                             ),
+                            const SizedBox(height: 4),
+                            Text(switch (state.sitePhase(site)) {
+                              SitePhase.ready =>
+                                state.siteMessages[site.id] ?? '主账号会话已保存',
+                              SitePhase.connecting =>
+                                state.siteMessages[site.id] ?? '正在连接…',
+                              SitePhase.failed =>
+                                state.siteMessages[site.id] ?? '初始化未完成，请重试',
+                              SitePhase.planned =>
+                                site.browserOnly
+                                    ? '仅在系统浏览器打开，不获取凭据'
+                                    : '待接入，暂不获取凭据',
+                              SitePhase.waiting =>
+                                site.onDemand
+                                    ? '按网络路径按需连接'
+                                    : state.connectedAt == null
+                                    ? '等待主账号登录'
+                                    : '等待初始化',
+                            }, style: Theme.of(context).textTheme.bodySmall),
+                            if (site.features.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                site.features
+                                    .map(
+                                      (f) => f.implemented
+                                          ? f.label
+                                          : '${f.label}（待接入）',
+                                    )
+                                    .join(' · '),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: colors.onSurfaceVariant),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
           if (state.connectedAt != null)
             Align(
               alignment: Alignment.centerLeft,

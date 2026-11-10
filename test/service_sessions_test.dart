@@ -36,6 +36,23 @@ class FakeSession implements ServiceSession {
   }
 }
 
+FakeSession fakeCalendar() => FakeSession(
+  (task, args) async => {
+    'ok': true,
+    'year': 2026,
+    'terms': [
+      {'weeks': []},
+      {'weeks': []},
+    ],
+  },
+);
+
+FakeSession fakeLibrary() => FakeSession(
+  (task, args) async => task == 'probe'
+      ? {'ok': true, 'ready': true}
+      : {'ok': true, 'total': 0, 'books': []},
+);
+
 FakeSession teaching({bool fail = false}) => FakeSession((task, args) async {
   if (fail) throw const FormatException('example failure');
   if (task == 'semesters') {
@@ -45,6 +62,18 @@ FakeSession teaching({bool fail = false}) => FakeSession((task, args) async {
       'terms': [
         {'DM': '2026-2027-1', 'MC': '当前学期'},
       ],
+    };
+  }
+  if (task == 'studentProfile') {
+    return {
+      'ok': true,
+      'profile': {
+        'name': '示例学生',
+        'studentNumber': 'synthetic-number',
+        'college': '示例学院',
+        'major': '示例专业',
+        'grade': '2024级',
+      },
     };
   }
   expect(args['term'], '2026-2027-1');
@@ -103,10 +132,15 @@ void main() {
     'one portal connection imports the current timetable and syncs accounts',
     () async {
       final t = teaching(), c = card();
-      final state = AppState(cardSession: c, teachingSession: t);
+      final state = AppState(
+        portalSession: fakeCalendar(),
+        librarySession: fakeLibrary(),
+        cardSession: c,
+        teachingSession: t,
+      );
       state.connectedAt ??= DateTime.now();
       await state.connectCampusServices();
-      expect(t.calls, ['semesters', 'schedule']);
+      expect(t.calls, ['semesters', 'schedule', 'studentProfile']);
       expect(c.calls, ['sync']);
       expect(state.schedule!.term, '2026-2027-1');
       expect(state.schedule!.courses, isNotEmpty);
@@ -118,13 +152,17 @@ void main() {
       expect(t.calls, [
         'semesters',
         'schedule',
+        'studentProfile',
         'semesters',
+        'studentProfile',
       ]); // Preserve an existing selected timetable.
     },
   );
   test('teaching failure does not prevent card synchronization', () async {
     final c = card();
     final state = AppState(
+      portalSession: fakeCalendar(),
+      librarySession: fakeLibrary(),
       cardSession: c,
       teachingSession: teaching(fail: true),
     );
@@ -138,6 +176,8 @@ void main() {
     'empty account results do not report successful synchronization',
     () async {
       final state = AppState(
+        portalSession: fakeCalendar(),
+        librarySession: fakeLibrary(),
         teachingSession: teaching(),
         cardSession: FakeSession((_, _) async => {'ok': true, 'errors': []}),
       );
@@ -150,7 +190,12 @@ void main() {
   test('account reset closes both services and rejects late results', () async {
     final pending = Completer<Map<String, dynamic>>();
     final t = FakeSession((_, _) => pending.future), c = card();
-    final state = AppState(cardSession: c, teachingSession: t);
+    final state = AppState(
+      portalSession: fakeCalendar(),
+      librarySession: fakeLibrary(),
+      cardSession: c,
+      teachingSession: t,
+    );
     state.connectedAt = DateTime.now();
     final operation = state.connectCampusServices();
     await state.clearPrivateData();
@@ -163,42 +208,49 @@ void main() {
     expect(state.accounts.wallet, isNull);
     expect(state.servicesNotice, isNull);
   });
-  test(
-    'initialization validates site credentials without fetching personal data',
-    () async {
-      final t = teaching();
-      final c = FakeSession((task, args) async {
-        expect(task, 'probe');
-        return {'ok': true, 'ready': true};
-      });
-      final state = AppState(cardSession: c, teachingSession: t);
-      state.connectedAt = DateTime.now();
-      state.connectedAt ??= DateTime.now();
-      await state.connectCampusServices(synchronizeData: false);
-      expect(t.calls, ['semesters']);
-      expect(c.calls, ['probe']);
-      expect(state.schedule, isNull);
-      expect(state.accounts.wallet, isNull);
-      expect(
-        state.sitePhase(SchoolSites.get(SchoolSiteId.teaching)),
-        SitePhase.ready,
-      );
-      expect(
-        state.sitePhase(SchoolSites.get(SchoolSiteId.campusCard)),
-        SitePhase.ready,
-      );
-      expect(
-        state.sitePhase(SchoolSites.get(SchoolSiteId.library)),
-        SitePhase.planned,
-      );
-    },
-  );
+  test('credential initialization is followed by separate profile sync without timetable or account reads', () async {
+    final t = teaching();
+    final c = FakeSession((task, args) async {
+      expect(task, 'probe');
+      return {'ok': true, 'ready': true};
+    });
+    final state = AppState(
+      portalSession: fakeCalendar(),
+      librarySession: fakeLibrary(),
+      cardSession: c,
+      teachingSession: t,
+    );
+    state.connectedAt = DateTime.now();
+    state.connectedAt ??= DateTime.now();
+    await state.connectCampusServices(synchronizeData: false);
+    expect(t.calls, ['semesters', 'studentProfile']);
+    expect(c.calls, ['probe']);
+    expect(state.schedule, isNull);
+    expect(state.accounts.wallet, isNull);
+    expect(
+      state.sitePhase(SchoolSites.get(SchoolSiteId.teaching)),
+      SitePhase.ready,
+    );
+    expect(
+      state.sitePhase(SchoolSites.get(SchoolSiteId.campusCard)),
+      SitePhase.ready,
+    );
+    expect(
+      state.sitePhase(SchoolSites.get(SchoolSiteId.library)),
+      SitePhase.ready,
+    );
+  });
 
   test(
     'initialization waits for the main account before accessing child sites',
     () async {
       final c = card(), t = teaching();
-      final state = AppState(cardSession: c, teachingSession: t);
+      final state = AppState(
+        portalSession: fakeCalendar(),
+        librarySession: fakeLibrary(),
+        cardSession: c,
+        teachingSession: t,
+      );
       await state.connectCampusServices(synchronizeData: false);
       expect(c.calls, isEmpty);
       expect(t.calls, isEmpty);
@@ -215,6 +267,8 @@ void main() {
     (tester) async {
       final pending = Completer<Map<String, dynamic>>();
       final state = AppState(
+        portalSession: fakeCalendar(),
+        librarySession: fakeLibrary(),
         cardSession: FakeSession((task, args) => pending.future),
         teachingSession: teaching(),
       );
@@ -231,8 +285,11 @@ void main() {
       expect(state.connectingServices, isTrue);
       pending.complete({'ok': true, 'ready': true});
       await tester.pumpAndSettle();
-      expect(find.text('已检查 2 / 2 个已接入子站点'), findsOneWidget);
-      expect(find.text('待接入，暂不获取凭据'), findsOneWidget);
+      expect(find.text('已检查 3 / 3 个已接入子站点'), findsOneWidget);
+      expect(
+        state.sitePhase(SchoolSites.get(SchoolSiteId.library)),
+        SitePhase.ready,
+      );
       await tester.tap(find.text('下一步'));
       await tester.pumpAndSettle();
       expect(find.text('选择实际宿舍'), findsOneWidget);
@@ -244,12 +301,17 @@ void main() {
     'an existing portal login reconnects school services on startup',
     (tester) async {
       final c = card(), t = teaching();
-      final state = AppState(cardSession: c, teachingSession: t);
+      final state = AppState(
+        portalSession: fakeCalendar(),
+        librarySession: fakeLibrary(),
+        cardSession: c,
+        teachingSession: t,
+      );
       state.connectedAt = DateTime.now();
       await tester.pumpWidget(MaterialApp(home: CampusShell(state: state)));
       await tester.pumpAndSettle();
       expect(c.calls, ['sync']);
-      expect(t.calls, ['semesters', 'schedule']);
+      expect(t.calls, ['semesters', 'schedule', 'studentProfile']);
       expect(state.accounts.wallet, isNotNull);
       expect(tester.takeException(), isNull);
     },
@@ -259,13 +321,23 @@ void main() {
     'account page queries a shared session automatically without displaying a WebView',
     (tester) async {
       final c = card(),
-          state = AppState(cardSession: c, teachingSession: teaching());
+          state = AppState(
+            portalSession: fakeCalendar(),
+            librarySession: fakeLibrary(),
+            cardSession: c,
+            teachingSession: teaching(),
+          );
       await tester.pumpWidget(
         MaterialApp(home: CampusAccountsPage(state: state)),
       );
       await tester.pumpAndSettle();
       expect(c.calls, ['wallet']);
-      expect(find.text('¥ 12.34'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('wallet-current-balance')))
+            .data,
+        '¥ 12.34',
+      );
       expect(find.text('连接学校一卡通'), findsNothing);
       await tester.tap(find.widgetWithText(ChoiceChip, '账单'));
       await tester.pumpAndSettle();

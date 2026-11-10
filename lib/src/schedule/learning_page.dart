@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 
 import '../app_state.dart';
+import '../chaoxing/chaoxing_page.dart';
 import '../academic/academic.dart';
 import '../academic/academic_page.dart';
 import '../widgets.dart';
@@ -15,7 +16,7 @@ class LearningPage extends StatefulWidget {
 }
 
 class _LearningPageState extends State<LearningPage> {
-  bool scheduleTab = true;
+  int learningTab = 0;
   @override
   Widget build(BuildContext context) {
     final schedule = widget.state.schedule,
@@ -24,25 +25,32 @@ class _LearningPageState extends State<LearningPage> {
       children: [
         Align(
           alignment: Alignment.centerLeft,
-          child: SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: true,
-                label: Text('课程安排'),
-                icon: Icon(Icons.calendar_month_outlined),
-              ),
-              ButtonSegment(
-                value: false,
-                label: Text('学业服务'),
-                icon: Icon(Icons.school_outlined),
-              ),
-            ],
-            selected: {scheduleTab},
-            onSelectionChanged: (v) => setState(() => scheduleTab = v.first),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(
+                  value: 0,
+                  label: Text('课程安排'),
+                  icon: Icon(Icons.calendar_month_outlined),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  label: Text('学业服务'),
+                  icon: Icon(Icons.school_outlined),
+                ),
+                ButtonSegment(
+                  value: 2,
+                  label: Text('学习通'),
+                  icon: Icon(Icons.menu_book_outlined),
+                ),
+              ],
+              selected: {learningTab},
+              onSelectionChanged: (v) => setState(() => learningTab = v.first),
+            ),
           ),
         ),
-        const SizedBox(height: 20),
-        if (scheduleTab) ...[
+        if (learningTab == 0) ...[
           Row(
             children: [
               Expanded(
@@ -117,7 +125,7 @@ class _LearningPageState extends State<LearningPage> {
                 ),
             ],
           ],
-        ] else ...[
+        ] else if (learningTab == 1) ...[
           for (final feature in AcademicFeature.values)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -136,7 +144,8 @@ class _LearningPageState extends State<LearningPage> {
                 ),
               ),
             ),
-        ],
+        ] else
+          ChaoxingPanel(state: widget.state),
       ],
     );
   }

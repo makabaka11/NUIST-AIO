@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 
 import '../app_state.dart';
 import '../theme_settings.dart';
@@ -19,8 +19,7 @@ Future<void> openScheduleImport(BuildContext context, AppState state) async {
     MaterialPageRoute(builder: (_) => ScheduleImportPage(state: state)),
   );
   if (context.mounted && result == true) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('课表已保存，可离线查看。')));
+    showCampusSnackBar(context, const SnackBar(content: Text('课表已保存，可离线查看。')));
   }
 }
 
@@ -78,7 +77,7 @@ Future<void> importScheduleJson(BuildContext context, AppState state) async {
     }
     await state.saveSchedule(schedule, generation: generation);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showCampusSnackBar(context,
         SnackBar(
           content: Text('已导入 ${schedule.courses.length} 条安排，使用 11 节作息。'),
         ),

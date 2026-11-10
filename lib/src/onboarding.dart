@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'campus_ui.dart';
 
 import 'app_state.dart';
 import 'accounts/dorm_picker.dart';

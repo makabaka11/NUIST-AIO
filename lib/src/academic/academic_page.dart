@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import '../campus_ui.dart';
 
 import '../app_state.dart';
 import '../auth/login_page.dart';

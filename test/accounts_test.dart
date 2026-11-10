@@ -214,11 +214,26 @@ void main() {
       expect(find.text('¥ 24.68').hitTestable(), findsOneWidget);
       await tester.tap(find.text('¥ 12.34').hitTestable());
       await tester.pumpAndSettle();
-      expect(find.text('电子账户余额'), findsOneWidget);
+      expect(find.text('校园卡余额'), findsOneWidget);
       await tester.tap(find.text('账单'));
       await tester.pumpAndSettle();
-      expect(find.text('示例消费'), findsOneWidget);
-      expect(find.text('¥ −12.34'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('¥ −12.34'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('¥ −12.34'));
+      await tester.pumpAndSettle();
+      expect(find.text('¥ −12.34').hitTestable(), findsOneWidget);
+      final recordTile = find.ancestor(
+        of: find.text('¥ −12.34'),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        find.descendant(of: recordTile, matching: find.text('示例消费')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );

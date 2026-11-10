@@ -23,7 +23,11 @@ abstract class ServiceSession {
 /// One live WebView per service. All views share the native CAS cookie jar;
 /// each service keeps its own origin-local token. No JWT crosses into Dart.
 class NativeServiceSession implements ServiceSession {
-  NativeServiceSession({required this.site});
+  NativeServiceSession({
+    required this.site,
+    this.connectionTimeout = const Duration(seconds: 45),
+  });
+  final Duration connectionTimeout;
   final SchoolSite site;
   bool get card => site.id == SchoolSiteId.campusCard;
   HeadlessInAppWebView? _view;
@@ -47,6 +51,7 @@ class NativeServiceSession implements ServiceSession {
     'rooms',
     'grades',
     'exams',
+    'studentProfile',
     'creditPlans',
     'credits',
   };
@@ -167,6 +172,7 @@ class NativeServiceSession implements ServiceSession {
     _pending = connected;
     String failure = '自动连接超时，请重新连接校园账号；如学校要求验证，请在官方页面完成。';
     bool probing = false;
+    bool authStarted = site.sessionEntry == null;
     bool documentReady = false;
     Future<void> probe() async {
       if (probing ||
@@ -193,7 +199,15 @@ class NativeServiceSession implements ServiceSession {
                   'typeof window.flutter_inappwebview === "object" && typeof window.flutter_inappwebview.callHandler === "function"',
             )
             .timeout(const Duration(seconds: 2));
-        if (stable != true) return;
+        if (stable != true) {
+          SsoDiagnostics.record(
+            site.id.name,
+            'document_gate',
+            ok: false,
+            type: stable.runtimeType.toString(),
+          );
+          return;
+        }
         final data = await _execute(
           site.probeTask!,
           {},
@@ -206,6 +220,14 @@ class NativeServiceSession implements ServiceSession {
         );
         if (site.isReady(data) && !connected.isCompleted) {
           connected.complete(true);
+        } else if (!authStarted && generation == _generation) {
+          // Validate the existing business session before starting another CAS
+          // flow. Its official callback initializes per-WebView frontend state.
+          authStarted = true;
+          documentReady = false;
+          await _controller!.loadUrl(
+            urlRequest: URLRequest(url: WebUri(site.authEntry!.toString())),
+          );
         }
       } catch (error) {
         SsoDiagnostics.record(
@@ -220,7 +242,11 @@ class NativeServiceSession implements ServiceSession {
     }
 
     final view = HeadlessInAppWebView(
-      initialUrlRequest: URLRequest(url: WebUri(site.entry!.toString())),
+      initialUrlRequest: URLRequest(
+        url: WebUri(
+          (site.sessionEntry ?? site.authEntry ?? site.entry!).toString(),
+        ),
+      ),
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
         useHybridComposition: false,
@@ -306,6 +332,7 @@ class NativeServiceSession implements ServiceSession {
         SsoDiagnostics.record(
           site.id.name,
           'load_stop',
+          ready: documentReady,
           location: url == null ? null : Uri.tryParse(url.toString()),
         );
         await probe();
@@ -313,6 +340,10 @@ class NativeServiceSession implements ServiceSession {
       onUpdateVisitedHistory: (_, _, _) => probe(),
       onReceivedError: (_, request, error) {
         if (request.isForMainFrame != true) return;
+        if (site.networkRouting && !connected.isCompleted) {
+          failure = '公告访问路径不可达，请检查校园网或 VPN。';
+          connected.complete(false);
+        }
         SsoDiagnostics.record(
           site.id.name,
           'load_error',
@@ -323,6 +354,10 @@ class NativeServiceSession implements ServiceSession {
       },
       onReceivedHttpError: (_, request, response) {
         if (request.isForMainFrame != true) return;
+        if (site.id == SchoolSiteId.library && !connected.isCompleted) {
+          failure = '图书馆认证入口暂不可用，请在官方页面确认登录后重试。';
+          connected.complete(false);
+        }
         SsoDiagnostics.record(
           site.id.name,
           'http_error',
@@ -339,7 +374,7 @@ class NativeServiceSession implements ServiceSession {
       await view.run();
       SsoDiagnostics.record(site.id.name, 'webview_running');
       final success = await connected.future.timeout(
-        const Duration(seconds: 45),
+        connectionTimeout,
         onTimeout: () => false,
       );
       SsoDiagnostics.record(
