@@ -2,6 +2,11 @@
 // 每个条目点击后展示对应二维码弹窗（带"保存"与"关闭"按钮），
 // 用户可扫码关注或保存到本机。
 
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../services/site_registry.dart';
+
 import '../campus_ui.dart';
 
 import '../miuix_widgets.dart';
@@ -66,12 +71,89 @@ const List<WikiEntry> nuistWikiEntries = <WikiEntry>[
 class WikiPage extends StatelessWidget {
   const WikiPage({super.key});
 
+  Future<void> openForum(BuildContext context) async {
+    try {
+      if (await launchUrl(
+        WikiCommunitySources.tieba,
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {}
+    if (context.mounted) {
+      showCampusSnackBar(
+        context,
+        const SnackBar(content: Text('无法打开贴吧，请检查系统浏览器')),
+      );
+    }
+  }
+
+  void showMarket(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: const Text('校园集市'),
+      content: const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('复制下方小程序链接，粘贴到微信任意对话并发送后，点击即可打开。'),
+          SizedBox(height: 16),
+          SelectableText(WikiCommunitySources.campusMarket),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialog),
+          child: const Text('关闭'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            try {
+              await Clipboard.setData(
+                const ClipboardData(text: WikiCommunitySources.campusMarket),
+              );
+              if (dialog.mounted) {
+                showCampusSnackBar(
+                  dialog,
+                  const SnackBar(content: Text('小程序链接已复制，请粘贴到微信对话')),
+                );
+              }
+            } catch (_) {
+              if (dialog.mounted) {
+                showCampusSnackBar(
+                  dialog,
+                  const SnackBar(content: Text('复制失败，请长按链接手动复制')),
+                );
+              }
+            }
+          },
+          child: const Text('复制链接'),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: campusAppBar(context, title: '南信大 Wiki'),
       body: PageBody(
         children: [
+          PreferenceGroup(
+            children: [
+              PreferenceRow(
+                icon: Icons.local_shipping_outlined,
+                title: '常用收货地址',
+                subtitle: '东苑、中苑与西苑快递站 · 支持复制',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const DeliveryAddressesPage(),
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SectionTitle('公众号与服务'),
           PreferenceGroup(
             children: [
@@ -91,20 +173,91 @@ class WikiPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Center(
+          Align(
+            alignment: Alignment.centerLeft,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                '点击任一条目查看对应二维码，可在弹窗中保存到本机后用微信扫码关注。',
-                textAlign: TextAlign.center,
+                '点击上方公众号条目查看对应二维码，可在弹窗中保存到本机后用微信扫码关注。',
+                textAlign: TextAlign.left,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
           ),
+          const SectionTitle('论坛'),
+          PreferenceGroup(
+            children: [
+              PreferenceRow(
+                icon: Icons.forum_outlined,
+                title: '贴吧',
+                subtitle: '南京信息工程大学吧 · 在系统浏览器中打开',
+                onTap: () => openForum(context),
+              ),
+              PreferenceRow(
+                icon: Icons.storefront_outlined,
+                title: '校园集市',
+                subtitle: '复制小程序链接，粘贴到微信对话后打开',
+                onTap: () => showMarket(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Text(
+            '如有遗漏或建议欢迎反馈补充',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+const deliveryAddresses = <String, List<String>>{
+  '东苑': ['江苏省南京市浦口区南京信息工程大学文德楼快递站，210044', '江苏省南京市浦口区盘锦花园菜鸟驿站，210044'],
+  '中苑/通用': ['江苏省南京市浦口区南信大气象谷快递站，210044'],
+  '西苑': ['江苏省南京市浦口区南京信息工程大学滨江楼快递站，210044'],
+};
+
+class DeliveryAddressesPage extends StatelessWidget {
+  const DeliveryAddressesPage({super.key});
+
+  Future<void> copy(BuildContext context, String address) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: address));
+      if (context.mounted) {
+        showCampusSnackBar(context, const SnackBar(content: Text('收货地址已复制')));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        showCampusSnackBar(context, const SnackBar(content: Text('复制失败，请重试')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: campusAppBar(context, title: '常用收货地址'),
+    body: PageBody(
+      children: [
+        for (final group in deliveryAddresses.entries) ...[
+          SectionTitle(group.key),
+          PreferenceGroup(
+            children: [
+              for (final address in group.value)
+                ListTile(
+                  title: Text(address),
+                  subtitle: const Text('点击复制收货地址'),
+                  trailing: const Icon(Icons.copy_outlined),
+                  onTap: () => copy(context, address),
+                ),
+            ],
+          ),
+        ],
+      ],
+    ),
+  );
 }

@@ -117,13 +117,13 @@ class SchoolSites {
       onDemand: true,
       features: const [
         SiteFeature('chaoxingCourses', '本学期学习通课程'),
+        SiteFeature('chaoxingCourseSelection', '课程匹配确认与手动选择'),
         SiteFeature('chaoxingProgress', '课程任务点进度'),
         SiteFeature('chaoxingWork', '学习通作业'),
         SiteFeature('chaoxingExam', '学习通考试'),
       ],
-      credentialRule:
-          '待本校账号实测。仅在超星官方页登录；Cookie 保留原生作用域，不导出、不保存密码。课程只读接口通过后方可手动同步。',
-      renewalRule: '不自动初始化或重登；失效后用户在官方页面重新登录。验证与数据同步分开；换号销毁会话及缓存。',
+      credentialRule: '仅在超星官方页登录；Cookie 保留原生作用域，Android 验证后落盘，不导出、不保存密码。仅持久化连接意愿；课程只读接口验证通过后才能同步。',
+      renewalRule: '不参与向导自动初始化。曾连接账号在进入学习通时使用原生 Cookie 做一次有界只读验证，通过后独立同步；失效返回官方登录，首次或名单变化需用户确认扫描课程；选择按校园账号与学期存于系统安全存储。换号清除连接意愿、Cookie、选择及缓存。',
     ),
     SchoolSite(
       id: SchoolSiteId.identity,
@@ -484,4 +484,12 @@ class AppReleaseSources {
     '/api/v5/repos${gitee.path}/releases',
     {'page': '1', 'per_page': '100'},
   );
+}
+
+/// Public community references only; no school authentication or probes.
+class WikiCommunitySources {
+  static final tieba = Uri.parse(
+    'https://tieba.baidu.com/f?kw=%E5%8D%97%E4%BA%AC%E4%BF%A1%E6%81%AF%E5%B7%A5%E7%A8%8B%E5%A4%A7%E5%AD%A6#/',
+  );
+  static const campusMarket = '#小程序://校园集市/CQeun6LnMHEyMQe';
 }

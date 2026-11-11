@@ -52,7 +52,7 @@ try {
       const courseId = String(d.id || ''), classId = String(c.id || ''), cpi = String(ch.cpi || c.cpi || '');
       if (![courseId,classId,cpi].every(v => /^\d+$/.test(v)) || typeof d.name !== 'string' || !d.name.trim()) throw Error();
       const key = courseId + ':' + classId;
-      if (!seen.has(key)) courses.push({courseId,classId,cpi,title:d.name.trim(),alias:typeof c.name === 'string' ? c.name : ''});
+      if (!seen.has(key)) courses.push({courseId,classId,cpi,title:d.name.trim(),alias:typeof c.name === 'string' ? c.name : '',teacher:typeof d.teacherfactor === 'string' ? d.teacherfactor.replace(/<[^>]*>/g,'').trim().slice(0,300) : ''});
       seen.add(key);
     }
     return {ok:true, courses};

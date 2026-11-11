@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_miuix/miuix.dart';
 
 import 'app_state.dart';
+import 'chaoxing/course_selection_dialog.dart';
 import 'updates/update_ui.dart';
 import 'miuix_widgets.dart';
 import 'onboarding.dart';
@@ -141,7 +142,7 @@ class CampusApp extends StatelessWidget {
 
         return MaterialApp(
           title: '信大AIO',
-          navigatorObservers: [updateRouteObserver],
+          navigatorObservers: [updateRouteObserver, chaoxingSelectionRoutes],
           debugShowCheckedModeBanner: false,
           locale: const Locale('zh', 'CN'),
           supportedLocales: const [Locale('zh', 'CN')],
@@ -173,9 +174,12 @@ class CampusApp extends StatelessWidget {
           },
           home: UpdateStartupGate(
             updates: state.updates,
-            child: state.onboarded
-                ? CampusShell(state: state)
-                : OnboardingPage(state: state),
+            child: ChaoxingSelectionHost(
+              repository: state.chaoxing,
+              child: state.onboarded
+                  ? CampusShell(state: state)
+                  : OnboardingPage(state: state),
+            ),
           ),
         );
       },

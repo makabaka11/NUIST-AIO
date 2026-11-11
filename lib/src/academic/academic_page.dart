@@ -34,6 +34,7 @@ class _AcademicPageState extends State<AcademicPage> {
   List<Map<String, dynamic>> plans = [], rows = [];
   Map<String, dynamic>? result;
   String keyword = '', gradeTerm = '';
+  String examFilter = '全部';
   int request = 0;
   late int generation;
   AcademicFeature get feature => widget.feature;
@@ -240,6 +241,12 @@ class _AcademicPageState extends State<AcademicPage> {
                   )),
         )
         .toList();
+    final now = DateTime.now();
+    if (feature == AcademicFeature.exams && examFilter != '全部') {
+      shown.removeWhere(
+        (row) => examCompleted(row, now) != (examFilter == '已完成'),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(feature.label),
@@ -287,6 +294,21 @@ class _AcademicPageState extends State<AcademicPage> {
                 setState(() => term = v);
                 load();
               }),
+            if (feature == AcademicFeature.exams)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final status in ['全部', '未完成', '已完成'])
+                      ChoiceChip(
+                        label: Text(status),
+                        selected: examFilter == status,
+                        onSelected: (_) => setState(() => examFilter = status),
+                      ),
+                  ],
+                ),
+              ),
             if (feature == AcademicFeature.credits && plans.isNotEmpty)
               dropdown(
                 '培养方案',
@@ -376,6 +398,11 @@ class _AcademicPageState extends State<AcademicPage> {
                     AcademicFeature.exams => record(
                       academicText(r, 'KCM'),
                       '${academicText(r, 'KSRQ')} · ${academicText(r, 'KSSJMS')}\n${academicText(r, 'XXXQMC')} ${academicText(r, 'JXLMC')} ${academicText(r, 'JASMC')}',
+                      trailing: switch (examCompleted(r, now)) {
+                        true => '已完成',
+                        false => '未完成',
+                        null => '时间待定',
+                      },
                       details: [
                         '考试：${academicText(r, 'KSMC')}',
                         '座位号：${academicText(r, 'ZWH')}',

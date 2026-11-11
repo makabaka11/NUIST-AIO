@@ -48,6 +48,7 @@ class _ChaoxingLoginPageState extends State<ChaoxingLoginPage>
     with WebViewPageLifecycle<ChaoxingLoginPage> {
   late final repository = widget.state.chaoxing;
   late int generation;
+  bool restoring = true;
   bool resetting = false;
   bool verifying = false, automaticProbeAttempted = false;
   String? error;
@@ -57,6 +58,15 @@ class _ChaoxingLoginPageState extends State<ChaoxingLoginPage>
     super.initState();
     generation = widget.state.sessionGeneration;
     widget.state.addListener(accountChanged);
+    unawaited(restoreConnection());
+  }
+
+  Future<void> restoreConnection() async {
+    try {
+      await widget.state.restoreChaoxing();
+    } finally {
+      if (mounted) setState(() => restoring = false);
+    }
   }
 
   void accountChanged() {
@@ -178,6 +188,7 @@ class _ChaoxingLoginPageState extends State<ChaoxingLoginPage>
                       FilledButton(
                         onPressed:
                             repository.busy ||
+                                restoring ||
                                 resetting ||
                                 !repository.supported
                             ? null
@@ -209,7 +220,11 @@ class _ChaoxingLoginPageState extends State<ChaoxingLoginPage>
               ),
             ),
             Expanded(
-              child: repository.verified
+              child: restoring
+                  ? const Center(
+                      child: LoadingText('正在恢复学习通会话…', loading: true),
+                    )
+                  : repository.verified
                   ? Center(
                       child: LoadingText(
                         repository.busy ? '学习通会话已验证，正在自动刷新本学期项目。' : '学习通会话已验证。',
@@ -340,12 +355,7 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          state.chaoxing.verified &&
-          !state.chaoxing.busy &&
-          state.chaoxing.updatedAt == null) {
-        unawaited(state.refreshChaoxing());
-      }
+      if (mounted) unawaited(state.restoreChaoxing());
     });
   }
 
@@ -488,6 +498,13 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
                 icon: const Icon(Icons.manage_accounts_outlined),
               ),
               IconButton(
+                tooltip: '修改扫描课程',
+                onPressed: r.verified && !r.busy && r.selection != null
+                    ? () => state.refreshChaoxing(confirmCourses: true)
+                    : null,
+                icon: const Icon(Icons.checklist_outlined),
+              ),
+              IconButton(
                 tooltip: '刷新课程、作业与考试',
                 onPressed: r.verified && !r.busy ? state.refreshChaoxing : null,
                 icon: const Icon(Icons.refresh),
@@ -522,7 +539,7 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
                 children: [
                   StatusTag(r.scanTerm!, color: colors.primary),
                   StatusTag(
-                    '本学期 ${r.selectedCourseCount} / 全部 ${r.totalCourseCount} 门',
+                    '已选 ${r.selectedCourseCount} / 学习通 ${r.totalCourseCount} 门',
                     color: colors.tertiary,
                   ),
                 ],

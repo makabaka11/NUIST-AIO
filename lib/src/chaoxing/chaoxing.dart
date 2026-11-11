@@ -3,12 +3,15 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../services/site_registry.dart';
 import '../services/sso_diagnostics.dart';
 import '../services/script_result.dart';
 import 'current_term.dart';
+import 'course_selection.dart';
 
 const chaoxingHosts = {
   'passport2.chaoxing.com',
@@ -191,6 +194,99 @@ class ChaoxingRepository extends ChangeNotifier {
   final Future<Map<String, dynamic>> Function(Uri, String)? documentReader;
   final Duration courseGap;
   Future<ChaoxingTermScope> Function()? currentTerm;
+  Future<String?> Function()? selectionOwner;
+  ChaoxingCourseSelection? selection, pendingSelection;
+  Set<String> selectedCourseKeys = {};
+  Completer<Set<String>?>? _selectionRequest;
+  String? _selectionFingerprint, _selectionOwner;
+  static const _selectionKey = 'nuist.chaoxing.courseSelection.v1';
+  static const _selectionStore = FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
+  Future<void> _selectionWrite = Future<void>.value();
+
+  void confirmCourseSelection(Set<String>? keys) {
+    final pending = pendingSelection, request = _selectionRequest;
+    if (pending == null || request == null || request.isCompleted) return;
+    request.complete(keys?.intersection(pending.keys));
+    pendingSelection = null;
+    _selectionRequest = null;
+    changed();
+  }
+
+  Future<Set<String>?> _chooseCourses(
+    ChaoxingCourseSelection proposal,
+    int token,
+    bool force,
+  ) async {
+    final owner = await selectionOwner?.call();
+    check(token);
+    if (!force &&
+        _selectionOwner == owner &&
+        _selectionFingerprint == proposal.fingerprint) {
+      selection = proposal;
+      return selectedCourseKeys.intersection(proposal.keys);
+    }
+    Set<String>? saved =
+        _selectionOwner == owner &&
+            _selectionFingerprint == proposal.fingerprint
+        ? selectedCourseKeys.intersection(proposal.keys)
+        : null;
+    if (owner != null) {
+      await _selectionWrite;
+      final raw = await _selectionStore.read(key: _selectionKey);
+      check(token);
+      if (raw != null) {
+        try {
+          final value = jsonDecode(raw) as Map;
+          if (value['owner'] == owner &&
+              value['fingerprint'] == proposal.fingerprint &&
+              value['selected'] is List &&
+              (value['selected'] as List).every((v) => v is String)) {
+            saved = (value['selected'] as List)
+                .cast<String>()
+                .toSet()
+                .intersection(proposal.keys);
+          }
+        } catch (_) {
+          /* Corrupt selections must be reviewed again. */
+        }
+      }
+    }
+    check(token);
+    selection = proposal;
+    selectedCourseKeys = saved ?? proposal.automatic;
+    if (!force && saved != null) {
+      _selectionOwner = owner;
+      _selectionFingerprint = proposal.fingerprint;
+      return saved;
+    }
+    final request = Completer<Set<String>?>();
+    _selectionRequest = request;
+    pendingSelection = proposal;
+    progress = '请确认本学期扫描课程';
+    changed();
+    final chosen = await request.future;
+    check(token);
+    if (chosen == null) return null;
+    if (owner != null) {
+      final value = jsonEncode({
+        'owner': owner,
+        'fingerprint': proposal.fingerprint,
+        'selected': chosen.toList()..sort(),
+      });
+      _selectionWrite = _selectionWrite
+          .catchError((Object _) {})
+          .then((_) => _selectionStore.write(key: _selectionKey, value: value));
+      await _selectionWrite;
+      check(token);
+    }
+    selectedCourseKeys = chosen;
+    _selectionOwner = owner;
+    _selectionFingerprint = proposal.fingerprint;
+    return chosen;
+  }
+
   String? scanTerm;
   int totalCourseCount = 0, selectedCourseCount = 0;
   bool _loadFailed = false;
@@ -512,6 +608,64 @@ class ChaoxingRepository extends ChangeNotifier {
     }
   }
 
+  static const _connectionKey = 'chaoxing.connection.v1';
+  final _preferences = SharedPreferencesAsync();
+  Future<void> _preferenceWrite = Future<void>.value();
+  Future<bool>? _restoring;
+  bool _restoreAttempted = false;
+
+  // Only connection intent is stored here. Credentials stay in the native jar.
+  Future<void> _rememberConnection(bool value) {
+    return _preferenceWrite = _preferenceWrite
+        .catchError((Object _) {})
+        .then((_) => _preferences.setBool(_connectionKey, value));
+  }
+
+  /// Called on demand when opening Learning/Chaoxing, never during onboarding
+  /// initialization. A saved intent is not proof of server authentication.
+  Future<bool> restoreConnection() {
+    if (verified) return Future.value(true);
+    return _restoring ??= _restoreConnection();
+  }
+
+  Future<bool> _restoreConnection() async {
+    if (verified) return true;
+    if (_restoreAttempted || busy || disposed) return false;
+    _restoreAttempted = true;
+    final token = generation;
+    try {
+      var remembered = await _preferences.getBool(_connectionKey);
+      // Migration for installations which already have native cookies but no
+      // saved connection intent. Native code returns presence only, never data.
+      if (remembered == null &&
+          supported &&
+          defaultTargetPlatform == TargetPlatform.android &&
+          documentReader == null) {
+        remembered = await const MethodChannel('nuistaio/chaoxing')
+            .invokeMethod<bool>('hasCourseCookies');
+      }
+      if (remembered != true || token != generation || disposed) return false;
+      await verify();
+      return token == generation && !disposed && verified;
+    } catch (_) {
+      if (token == generation && !disposed) {
+        notice = '会话恢复未完成，请点击连接重试。';
+        noticeIsError = true;
+        changed();
+      }
+      return false;
+    }
+  }
+
+  Future<void> _flushCookies() async {
+    if (supported &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        documentReader == null) {
+      await const MethodChannel('nuistaio/chaoxing')
+          .invokeMethod<void>('flushCookies');
+    }
+  }
+
   Future<void> verify() async {
     if (busy) return;
     busy = true;
@@ -529,6 +683,10 @@ class ChaoxingRepository extends ChangeNotifier {
       _courses = (data['courses'] as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+      await _flushCookies();
+      check(token);
+      await _rememberConnection(true);
+      check(token);
       verified = true;
       notice = '课程接口已验证。';
     } catch (_) {
@@ -547,7 +705,7 @@ class ChaoxingRepository extends ChangeNotifier {
     }
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool confirmCourses = false}) async {
     if (busy || !verified) return;
     final token = generation;
     busy = true;
@@ -573,7 +731,19 @@ class ChaoxingRepository extends ChangeNotifier {
       final scope = await currentTerm!();
       check(token);
       totalCourseCount = _courses.length;
-      _courses = _courses.where(scope.includes).toList();
+      final chosen = await _chooseCourses(
+        ChaoxingCourseSelection(scope, _courses),
+        token,
+        confirmCourses,
+      );
+      check(token);
+      if (chosen == null) {
+        notice = '已取消课程确认，未开始扫描。';
+        return;
+      }
+      _courses = _courses
+          .where((c) => chosen.contains(chaoxingCourseKey(c)))
+          .toList();
       selectedCourseCount = _courses.length;
       final previousCourses = scanTerm == scope.term
           ? {for (final c in courses) c.key: c}
@@ -753,6 +923,18 @@ class ChaoxingRepository extends ChangeNotifier {
 
   Future<void> close({bool clearCookies = false}) async {
     generation++;
+    confirmCourseSelection(null);
+    selection = null;
+    selectedCourseKeys = {};
+    _selectionFingerprint = null;
+    _selectionOwner = null;
+    final forgetSelection = clearCookies
+        ? (_selectionWrite = _selectionWrite
+              .catchError((Object _) {})
+              .then((_) => _selectionStore.delete(key: _selectionKey)))
+        : null;
+    _restoring = null;
+    _restoreAttempted = clearCookies;
     verified = false;
     busy = false;
     items = [];
@@ -771,7 +953,12 @@ class ChaoxingRepository extends ChangeNotifier {
     final view = _view;
     _view = null;
     _controller = null;
+    // Queue removal behind any in-flight verification write so late results
+    // cannot resurrect connection intent after an explicit account removal.
+    final forget = clearCookies ? _rememberConnection(false) : null;
     await view?.dispose();
+    await forget;
+    await forgetSelection;
     if (clearCookies && supported) {
       for (final host in chaoxingHosts) {
         await CookieManager.instance().deleteCookies(
@@ -783,6 +970,7 @@ class ChaoxingRepository extends ChangeNotifier {
         domain: '.chaoxing.com',
       );
     }
+    if (clearCookies) await _flushCookies();
     changed();
   }
 

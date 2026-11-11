@@ -17,6 +17,17 @@ import 'package:nuist_aio/src/app_state.dart';
 import 'service_sessions_test.dart' show FakeSession;
 
 void main() {
+  test('exam status uses China end time and leaves missing times unknown', () {
+    final now = DateTime.parse('2026-11-11T04:00:00Z');
+    expect(examCompleted({'KSRQ': '2026-11-11', 'KSJSSJ': '12:00'}, now), true);
+    expect(
+      examCompleted({'KSRQ': '2026-11-11', 'KSSJMS': '13:00-15:00'}, now),
+      false,
+    );
+    expect(examCompleted({'KSJSSJ': '2026-11-10 12:00:00'}, now), true);
+    expect(examCompleted({'KSRQ': '2026-11-10'}, now), null);
+    expect(examCompleted({'KSSJMS': '时间待定'}, now), null);
+  });
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
     SharedPreferencesAsyncPlatform.instance =

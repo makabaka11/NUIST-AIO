@@ -165,8 +165,8 @@ class CampusLinkDetector extends ChangeNotifier {
   Future<void> detect({bool force = false}) {
     if (force) reset();
     if (_disposed) return Future.value();
-    if (_pending != null) return _pending!;
     if (fresh) return Future.value();
+    if (_pending != null) return _pending!;
     final generation = _generation;
     checking = true;
     results.clear();
@@ -237,7 +237,10 @@ class CampusLinkDetector extends ChangeNotifier {
     if (!link.vpn || mode == CampusNetworkMode.direct) return uri;
     final generation = _generation;
     if (mode == CampusNetworkMode.automatic) {
-      await detect();
+      // A completed result for this site must not wait for unrelated probes.
+      final cached = (fresh || checking) ? results[link.id] : null;
+      if (cached?.path == CampusPath.direct) return uri;
+      if (cached?.path != CampusPath.vpn) await detect();
       _valid(generation);
       final status = results[link.id];
       if (status?.path == CampusPath.direct) return uri;

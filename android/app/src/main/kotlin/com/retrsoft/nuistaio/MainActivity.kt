@@ -7,12 +7,25 @@ import org.json.JSONObject
 import java.io.File
 import android.content.Intent
 import android.net.Uri
+import android.webkit.CookieManager
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nuistaio/chaoxing")
             .setMethodCallHandler { call, result ->
+                if (call.method == "hasCourseCookies") {
+                    result.success(!CookieManager.getInstance()
+                        .getCookie("https://mooc1-api.chaoxing.com/mycourse/backclazzdata")
+                        .isNullOrEmpty())
+                    return@setMethodCallHandler
+                }
+                if (call.method == "flushCookies") {
+                    runCatching { CookieManager.getInstance().flush() }
+                        .onSuccess { result.success(null) }
+                        .onFailure { result.error("cookie_store", "Cookie store unavailable", null) }
+                    return@setMethodCallHandler
+                }
                 if (call.method != "openItem") { result.notImplemented(); return@setMethodCallHandler }
                 val opened = runCatching {
                     val uri = Uri.parse(call.arguments as? String ?: "")

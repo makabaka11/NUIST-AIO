@@ -149,3 +149,9 @@ test('published chapter iframes cannot mix another course progress into the sele
  const frame={getAttribute:()=> 'https://mooc1.chaoxing.com/mooc2-ans/mycourse/studentcourse?courseid=11&clazzid=20&cpi=30'};
  assert.equal((await run({task:'progress',url,frames:[frame],requestedCourseId:'10',requestedClassId:'20',requestedCpi:'30'})).code,'pending');
 });
+
+test('course list retains optional official teacher names without unrelated profile data',async()=>{
+ const r=await run({task:'courses',url:'https://mooc1-api.chaoxing.com/mycourse/backclazzdata',text:JSON.stringify({channelList:[{cpi:3,content:{id:2,course:{data:[{id:1,name:'课程',teacherfactor:' 教师甲、教师乙 ',privateId:'PRIVATE'}]}}}]})});
+ assert.equal(r.courses[0].teacher,'教师甲、教师乙');
+ assert(!JSON.stringify(r).includes('PRIVATE'));
+});

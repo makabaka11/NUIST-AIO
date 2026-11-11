@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../campus_ui.dart';
 
 import '../academic/official_page.dart';
@@ -20,8 +22,9 @@ class SchoolBrowserEntryTile extends StatefulWidget {
 
 class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
   bool busy = false;
+  bool opening = false;
   Future<void> open() async {
-    if (busy) return;
+    if (opening) return;
     final link = widget.link;
     if (link.instructions != null) {
       await showDialog<void>(
@@ -39,7 +42,11 @@ class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
       );
       return;
     }
-    setState(() => busy = true);
+    opening = true;
+    // Cached routing normally completes immediately; avoid flashing a spinner.
+    final loading = Timer(const Duration(milliseconds: 200), () {
+      if (mounted && opening) setState(() => busy = true);
+    });
     final generation = widget.state.sessionGeneration;
     try {
       final url = await widget.state.resolveBrowserLink(link);
@@ -58,6 +65,8 @@ class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
         );
       }
     } finally {
+      loading.cancel();
+      opening = false;
       if (mounted) setState(() => busy = false);
     }
   }

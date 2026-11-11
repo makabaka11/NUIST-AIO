@@ -19,6 +19,13 @@ import 'package:nuist_aio/src/app_state.dart';
 import 'package:nuist_aio/src/schedule/learning_page.dart';
 import 'package:nuist_aio/src/services/site_registry.dart';
 
+void autoConfirmCourses(ChaoxingRepository repository) {
+  repository.addListener(() {
+    final pending = repository.pendingSelection;
+    if (pending != null) repository.confirmCourseSelection(pending.automatic);
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
@@ -35,6 +42,84 @@ void main() {
     'time': '剩余1小时',
     'url': 'https://mooc1.chaoxing.com/work/detail?id=1',
   };
+  test(
+    'cold repository restores native session only after server probe',
+    () async {
+      var reads = 0;
+      Future<Map<String, dynamic>> reader(Uri _, String task) async {
+        reads++;
+        expect(task, 'courses');
+        return {
+          'ok': true,
+          'courses': [course],
+        };
+      }
+
+      final first = ChaoxingRepository(documentReader: reader);
+      await first.verify();
+      expect(first.verified, true);
+      await first.close();
+      final cold = ChaoxingRepository(documentReader: reader);
+      expect(cold.verified, false);
+      final restored = await Future.wait([
+        cold.restoreConnection(),
+        cold.restoreConnection(),
+      ]);
+      expect(restored, [true, true]);
+      expect(reads, 2);
+      expect(cold.verified, true);
+      expect(cold.items, isEmpty); // Verification does not scan personal data.
+      await cold.close(clearCookies: true);
+      final removed = ChaoxingRepository(documentReader: reader);
+      expect(await removed.restoreConnection(), false);
+      expect(reads, 2);
+      first.dispose();
+      cold.dispose();
+      removed.dispose();
+    },
+  );
+
+  test('saved intent cannot authenticate expired session or revive removed account', () async {
+    final first = ChaoxingRepository(
+      documentReader: (_, _) async => {
+        'ok': true,
+        'courses': [course],
+      },
+    );
+    await first.verify();
+    final expired = ChaoxingRepository(
+      documentReader: (_, _) async => {'ok': false, 'code': 'auth'},
+    );
+    expect(await expired.restoreConnection(), false);
+    expect(expired.verified, false);
+    final response = Completer<Map<String, dynamic>>();
+    final started = Completer<void>();
+    final late = ChaoxingRepository(
+      documentReader: (_, _) {
+        started.complete();
+        return response.future;
+      },
+    );
+    final restoring = late.restoreConnection();
+    await started.future;
+    await late.close(clearCookies: true);
+    response.complete({
+      'ok': true,
+      'courses': [course],
+    });
+    expect(await restoring, false);
+    expect(late.verified, false);
+    final next = ChaoxingRepository(
+      documentReader: (_, _) async =>
+          throw StateError('removed accounts must not request'),
+    );
+    expect(await next.restoreConnection(), false);
+    first.dispose();
+    expired.dispose();
+    late.dispose();
+    next.dispose();
+  });
+
   test(
     'unverified integration cannot initialize or request automatically',
     () async {
@@ -74,6 +159,7 @@ void main() {
                 };
         },
       );
+      autoConfirmCourses(r);
       await r.verify();
       expect(r.verified, true);
       expect(tasks, ['courses']);
@@ -120,6 +206,7 @@ void main() {
           };
         },
       );
+      autoConfirmCourses(r);
       await r.verify();
       await r.refresh();
       expect(r.items.map((e) => e.title), ['work 0', 'exam 0']);
@@ -159,7 +246,9 @@ void main() {
           return {'ok': false, 'code': 'busy'};
         },
       );
+      autoConfirmCourses(r);
       await r.verify();
+      autoConfirmCourses(r);
       await r.verify();
       expect(calls, 1);
       expect(r.verified, false);
@@ -194,6 +283,7 @@ void main() {
         return {'ok': true, 'items': []};
       },
     );
+    autoConfirmCourses(r);
     await r.verify();
     await r.refresh();
     expect(r.courses.single.completed, 4);
@@ -270,6 +360,7 @@ void main() {
         return {'ok': true, 'items': []};
       },
     );
+    autoConfirmCourses(r);
     await r.verify();
     final scanning = r.refresh();
     await started.future;
@@ -366,6 +457,7 @@ void main() {
         return {'ok': true, 'items': []};
       },
     );
+    autoConfirmCourses(r);
     await r.verify();
     await r.refresh();
     expect(r.totalCourseCount, 5);
@@ -432,6 +524,7 @@ void main() {
       'term': '2025-2026-2',
     });
     state.schedule = historical;
+    autoConfirmCourses(repository);
     await repository.verify();
     await state.refreshChaoxing();
     expect(calls, ['semesters', 'schedule']);
@@ -679,6 +772,7 @@ void main() {
       }),
     );
     state.connectedAt = DateTime.now();
+    autoConfirmCourses(repository);
     expect(await state.connectChaoxing(), true);
     await scanned.future;
     expect(repository.selectedCourseCount, 1);

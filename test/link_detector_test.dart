@@ -62,6 +62,24 @@ void main() {
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.empty();
   });
+  test('ready site opens while unrelated probes are still pending', () async {
+    final pending = Completer<bool>();
+    final detector = CampusLinkDetector(
+      directProbe: (link) =>
+          link.id == 'studentAffairs' ? Future.value(true) : pending.future,
+      directory: () async => directory(),
+    );
+    final work = detector.detect();
+    await Future<void>.delayed(Duration.zero);
+    final resolved = await detector
+        .resolve(entry('studentAffairs'), CampusNetworkMode.automatic)
+        .timeout(const Duration(milliseconds: 100));
+    expect(resolved, entry('studentAffairs').entry);
+    expect(detector.checking, true);
+    pending.complete(true);
+    await work;
+    detector.dispose();
+  });
   test('auto mode keeps per-site direct results and uses directory for only failed sites', () async {
     var probes = 0, dirs = 0;
     final detector = CampusLinkDetector(

@@ -774,13 +774,12 @@ class _ProfilePage extends StatelessWidget {
             ),
           ],
         ),
-        const SectionTitle('Wiki'),
         PreferenceGroup(
           children: [
             PreferenceRow(
               icon: Icons.menu_book_outlined,
-              title: '南信大公众号与服务',
-              subtitle: '官方公众号、总后勤、图书馆等二维码',
+              title: 'Wiki',
+              subtitle: '你知道的和不知道的校园资源',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute<void>(builder: (_) => const WikiPage()),

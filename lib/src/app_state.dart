@@ -100,6 +100,16 @@ class AppState extends ChangeNotifier {
   Future<Uri> resolveBrowserLink(SchoolBrowserLink link) => networkLinks
       .resolve(link, networkMode, studentNumber: studentProfile?.studentNumber);
   final ChaoxingRepository chaoxing;
+  Future<bool> restoreChaoxing() async {
+    final generation = sessionGeneration;
+    final restored = await chaoxing.restoreConnection();
+    if (_disposed || generation != sessionGeneration || !restored) return false;
+    if (!chaoxing.busy && chaoxing.updatedAt == null) {
+      unawaited(refreshChaoxing());
+    }
+    return true;
+  }
+
   Future<bool> connectChaoxing() async {
     if (chaoxing.busy) return false;
     final generation = sessionGeneration;
@@ -112,9 +122,10 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  Future<void> refreshChaoxing() async {
+  Future<void> refreshChaoxing({bool confirmCourses = false}) async {
     chaoxing.currentTerm = _currentChaoxingTerm;
-    await chaoxing.refresh();
+    chaoxing.selectionOwner = sessions.accountKey;
+    await chaoxing.refresh(confirmCourses: confirmCourses);
   }
 
   Future<ChaoxingTermScope> _currentChaoxingTerm() async {
