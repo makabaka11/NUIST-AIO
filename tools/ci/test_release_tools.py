@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from release_metadata import metadata
+from release_metadata import PLATFORM_NOTES, metadata
 from restore_android_key import properties_escape, restore
 from check_assets import check, expected_assets
 import publish_gitee
@@ -17,7 +17,7 @@ class ReleaseToolsTest(unittest.TestCase):
         self.addCleanup(printer.stop)
 
     def test_tag_version_and_notes_must_match(self):
-        self.assertEqual(metadata('v0.5.0', 'version: 0.5.0+15\n', '# v0.5.0\n\nChanges\n')['build'], '15')
+        self.assertEqual(metadata('v0.5.0', 'version: 0.5.0+15\n', '# v0.5.0\n\nChanges\n' + PLATFORM_NOTES)['build'], '15')
         for tag, version, notes in [
             ('v0.5.0-beta', '0.5.0+15', '# v0.5.0-beta\nChanges'),
             ('v0.5.0', '0.4.0+15', '# v0.5.0\nChanges'),
@@ -27,6 +27,14 @@ class ReleaseToolsTest(unittest.TestCase):
         ]:
             with self.assertRaises(ValueError):
                 metadata(tag, 'version: ' + version, notes)
+
+    def test_platform_notes_are_required_in_every_release(self):
+        notes = '# v0.5.0\n\n' + PLATFORM_NOTES + '\n'
+        self.assertEqual(metadata('v0.5.0', 'version: 0.5.0+15\n', notes)['tag'], 'v0.5.0')
+        for line in PLATFORM_NOTES.splitlines():
+            if line:
+                with self.assertRaisesRegex(ValueError, 'fixed platform notes'):
+                    metadata('v0.5.0', 'version: 0.5.0+15\n', notes.replace(line, ''))
 
     def test_all_platform_packages_required(self):
         with tempfile.TemporaryDirectory() as directory:
