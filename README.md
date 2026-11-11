@@ -20,14 +20,19 @@
 <details open>
 <summary><strong>首页与功能入口</strong></summary>
 
+<p align="center">
+  <img src="assets/首页.png" width="280" alt="首页问候与当天课程时间轴">
+</p>
+<p align="center"><strong>首页 · 当天课程时间轴</strong></p>
+
 <table>
   <tr>
-    <th width="50%">首页 · 当天课程时间轴</th>
-    <th width="50%">功能 · 常用校园服务</th>
+    <th width="50%">功能 · 学习与教务</th>
+    <th width="50%">功能 · 生活与资源</th>
   </tr>
   <tr>
-    <td align="center"><img src="assets/首页.png" width="280" alt="首页问候与当天课程时间轴"></td>
-    <td align="center"><img src="assets/功能列表.png" width="280" alt="按学习、生活与资源分类的校园功能列表"></td>
+    <td align="center"><img src="assets/功能列表.png" width="280" alt="学习与教务功能列表"></td>
+    <td align="center"><img src="assets/功能列表2.png" width="280" alt="校园生活与资源功能列表"></td>
   </tr>
 </table>
 
