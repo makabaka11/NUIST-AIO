@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 from check_assets import check, expected_assets
+from release_notes import compose
 
 HOST = 'gitee.com'
 BASE = '/api/v5/repos/ded_retr0/NUIST-AIO'
@@ -99,7 +100,7 @@ def publish():
         raise RuntimeError('Mirror the tagged source commit to Gitee before publishing')
     release = api('GET', '/releases/tags/' + quote(tag, safe=''), missing=True)
     fields = {'access_token': token, 'tag_name': tag, 'name': tag,
-              'body': Path('RELEASE_NOTE.md').read_text(), 'prerelease': 'false'}
+              'body': compose(Path('RELEASE_NOTE.md').read_text()), 'prerelease': 'false'}
     if release is None:
         release = api('POST', '/releases', {**fields, 'target_commitish': commit})
     else:

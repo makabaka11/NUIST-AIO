@@ -16,5 +16,7 @@
 
 ## 构建与设备
 
+- `RELEASE_NOTE.md` 只需编写版本更新内容，不用专门写“平台说明”。发布时 `tools/ci/release_notes.py` 为 GitHub/Gitee 统一追加固定平台说明；文件中已有的“平台说明”章节会被替换，固定文案以该脚本为准。
+
 - 不安装或启动 iOS 模拟器。优先连接安卓真机验证；没有设备时明确标注验证边界。
 - 发布包名为 `com.retrsoft.nuistaio`。沿用 `android/keystore/nuistaio-release.jks`，禁止重新生成或覆盖已有发布密钥；密钥与 key.properties 禁止提交或分发。

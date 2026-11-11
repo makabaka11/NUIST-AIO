@@ -147,11 +147,12 @@ jobs:
         run: |
           python3 tools/ci/check_assets.py dist "$RELEASE_TAG"
           (cd dist && sha256sum nuistaio-* > SHA256SUMS.txt)
+          python3 tools/ci/release_notes.py RELEASE_NOTE.md "$RUNNER_TEMP/release-notes.md"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" dist/* --clobber
-            gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file RELEASE_NOTE.md --draft=false --prerelease=false --latest
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --draft=false --prerelease=false --latest
           else
-            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "$RELEASE_TAG" --notes-file RELEASE_NOTE.md --latest
+            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
           fi
 
   mirror:

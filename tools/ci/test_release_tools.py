@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from release_metadata import PLATFORM_NOTES, metadata
+from release_metadata import metadata
+from release_notes import PLATFORM_NOTES, compose
 from restore_android_key import properties_escape, restore
 from check_assets import check, expected_assets
 import publish_gitee
@@ -28,13 +29,22 @@ class ReleaseToolsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 metadata(tag, 'version: ' + version, notes)
 
-    def test_platform_notes_are_required_in_every_release(self):
-        notes = '# v0.5.0\n\n' + PLATFORM_NOTES + '\n'
+    def test_platform_notes_are_appended_without_requiring_source_section(self):
+        notes = '# v0.5.0\n\n## 修复\n\n- 修复构建。\n'
         self.assertEqual(metadata('v0.5.0', 'version: 0.5.0+15\n', notes)['tag'], 'v0.5.0')
-        for line in PLATFORM_NOTES.splitlines():
-            if line:
-                with self.assertRaisesRegex(ValueError, 'fixed platform notes'):
-                    metadata('v0.5.0', 'version: 0.5.0+15\n', notes.replace(line, ''))
+        self.assertEqual(compose(notes), notes.rstrip() + '\n\n' + PLATFORM_NOTES + '\n')
+
+    def test_existing_platform_sections_are_replaced_and_other_sections_preserved(self):
+        notes = ('# v0.5.0\n\n## 平台说明\n旧说明\n### 旧细节\n旧内容\n'
+                 '## 修复\n- 修复构建。\n## 平台说明 ##\n另一份旧说明\n')
+        result = compose(notes)
+        self.assertEqual(result, '# v0.5.0\n\n## 修复\n- 修复构建。\n\n' + PLATFORM_NOTES + '\n')
+        self.assertEqual(compose(result), result)
+        self.assertEqual(compose(notes.replace('\n', '\r\n')), result)
+
+    def test_headings_in_code_fences_are_preserved(self):
+        notes = '# v0.5.0\n\n```markdown\n## 平台说明\n示例\n```\n'
+        self.assertTrue(compose(notes).startswith(notes.rstrip()))
 
     def test_all_platform_packages_required(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -79,7 +89,7 @@ class ReleaseToolsTest(unittest.TestCase):
             publish_gitee.publish()
             self.assertEqual(api.call_args_list[0].args[1], '/commits/' + 'a' * 40)
             fields = api.call_args_list[2].args[2]
-            self.assertEqual(fields['body'], Path('RELEASE_NOTE.md').read_text())
+            self.assertEqual(fields['body'], compose(Path('RELEASE_NOTE.md').read_text()))
             self.assertEqual(fields['target_commitish'], 'a' * 40)
             self.assertEqual(upload.call_count, 7)
 
