@@ -112,9 +112,9 @@
 
 | 平台 | 下载与使用 |
 | --- | --- |
-| Android | 下载 `.apk` 安装。 |
+| Android | 64 位 ARM 设备下载 `android-arm64-v8a.apk`，32 位 ARM 设备下载 `android-armeabi-v7a.apk` 安装。 |
 | iOS | 下载 `.ipa`，需要自行签名后安装。 |
-| macOS | 下载 `macos-universal.zip`，解压后将应用放入「应用程序」，支持 Apple 芯片与 Intel Mac；当前未进行 Apple 公证。 |
+| macOS | Apple 芯片下载 `macos-arm64.zip`，Intel Mac 下载 `macos-x86_64.zip`，解压后将应用放入「应用程序」；当前未进行 Apple 公证。 |
 | Windows | 下载 `windows-x64.zip`，完整解压后运行 `nuist_aio.exe`；当前学校登录及依赖网页会话的查询尚未适配。 |
 
 具体可下载的平台与版本以发布页附件为准。

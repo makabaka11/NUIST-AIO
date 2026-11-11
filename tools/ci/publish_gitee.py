@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import secrets
 import sys
+import time
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
@@ -20,12 +21,14 @@ BASE = '/api/v5/repos/ded_retr0/NUIST-AIO'
 
 
 def api(method, path, fields=None, missing=False):
+    # Log only the operation, never a URL, request body or credential.
+    print(f'Gitee API: {method}', flush=True)
     data = None if fields is None else urlencode(fields).encode()
     request = Request('https://' + HOST + BASE + path, data=data, method=method,
                       headers={'Content-Type': 'application/x-www-form-urlencoded',
                                'User-Agent': 'NUIST-AIO-Release-CI'})
     try:
-        with urlopen(request, timeout=90) as response:
+        with urlopen(request, timeout=30) as response:
             return json.load(response)
     except HTTPError as error:
         if missing and error.code == 404:
@@ -36,28 +39,44 @@ def api(method, path, fields=None, missing=False):
 
 
 def upload(release_id, file, token):
+    size = file.stat().st_size
+    print(f'Uploading Gitee attachment: {file.name} ({size} bytes)', flush=True)
+    started = time.monotonic()
     boundary = 'nuistaio-' + secrets.token_hex(16)
     prefix = (f'--{boundary}\r\nContent-Disposition: form-data; name="access_token"\r\n\r\n'
               f'{token}\r\n--{boundary}\r\nContent-Disposition: form-data; name="file"; '
               f'filename="{file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n').encode()
     suffix = f'\r\n--{boundary}--\r\n'.encode()
-    connection = http.client.HTTPSConnection(HOST, timeout=300)
+    connection = http.client.HTTPSConnection(HOST, timeout=30)
     try:
         connection.putrequest('POST', f'{BASE}/releases/{release_id}/attach_files')
         connection.putheader('Content-Type', f'multipart/form-data; boundary={boundary}')
         connection.putheader('Content-Length', str(len(prefix) + file.stat().st_size + len(suffix)))
         connection.endheaders()
         connection.send(prefix)
+        sent = 0
+        last_progress = started
         with file.open('rb') as content:
             while chunk := content.read(1024 * 1024):
+                if time.monotonic() - started > 180:
+                    raise RuntimeError('Gitee attachment upload exceeded 180 seconds')
                 connection.send(chunk)
+                sent += len(chunk)
+                now = time.monotonic()
+                if now - last_progress >= 10:
+                    print(f'Gitee upload {file.name}: {sent}/{size} bytes', flush=True)
+                    last_progress = now
         connection.send(suffix)
+        print(f'Gitee upload {file.name}: sent; waiting for response', flush=True)
         response = connection.getresponse()
         if response.status not in (200, 201):
             raise RuntimeError(f'Gitee attachment upload failed: HTTP {response.status}')
         result = json.loads(response.read(2 * 1024 * 1024))
         if not isinstance(result, dict) or not isinstance(result.get('id'), int):
             raise RuntimeError('Gitee returned an invalid attachment')
+    except (OSError, http.client.HTTPException):
+        # Do not retry an ambiguous POST: the server may have stored the file.
+        raise RuntimeError('Gitee attachment upload connection failed or timed out; check attachments before retrying') from None
     finally:
         connection.close()
 
@@ -100,10 +119,10 @@ def publish():
         if matches:
             if len(matches) != 1 or matches[0].get('size') != file.stat().st_size:
                 raise RuntimeError('Gitee attachment conflict; review existing release files before retrying')
-            print(f'Keeping existing Gitee attachment: {name}')
+            print(f'Keeping existing Gitee attachment: {name}', flush=True)
             continue
         upload(release_id, file, token)
-        print(f'Uploaded Gitee attachment: {name}')
+        print(f'Uploaded Gitee attachment: {name}', flush=True)
 
 
 if __name__ == '__main__':

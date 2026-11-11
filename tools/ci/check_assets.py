@@ -1,12 +1,12 @@
-"""Fail publishing unless all four exact package files exist and are nonempty."""
+"""Fail publishing unless all architecture-specific package files exist and are nonempty."""
 from pathlib import Path
 import sys
 
 
 def expected_assets(tag):
     return [f'nuistaio-{tag}-{suffix}' for suffix in (
-        'android-universal.apk', 'ios-unsigned.ipa',
-        'macos-universal.zip', 'windows-x64.zip')]
+        'android-armeabi-v7a.apk', 'android-arm64-v8a.apk', 'ios-unsigned.ipa',
+        'macos-arm64.zip', 'macos-x86_64.zip', 'windows-x64.zip')]
 
 
 def check(directory, tag):

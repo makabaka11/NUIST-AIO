@@ -81,9 +81,11 @@ jobs:
         if: matrix.platform == 'android'
         shell: bash
         run: |
-          flutter build apk --release --build-name="$RELEASE_VERSION" --build-number="$RELEASE_BUILD"
+          flutter build apk --release --split-per-abi --target-platform=android-arm,android-arm64 --build-name="$RELEASE_VERSION" --build-number="$RELEASE_BUILD"
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/nuistaio-${RELEASE_TAG}-android-universal.apk"
+          for ABI in armeabi-v7a arm64-v8a; do
+            cp "build/app/outputs/flutter-apk/app-${ABI}-release.apk" "dist/nuistaio-${RELEASE_TAG}-android-${ABI}.apk"
+          done
       - name: Build unsigned IPA for re-signing
         if: matrix.platform == 'ios'
         shell: bash
@@ -92,7 +94,7 @@ jobs:
           mkdir -p build/ios/package/Payload dist
           ditto build/ios/iphoneos/Runner.app build/ios/package/Payload/Runner.app
           (cd build/ios/package && zip -qry "$GITHUB_WORKSPACE/dist/nuistaio-${RELEASE_TAG}-ios-unsigned.ipa" Payload)
-      - name: Build macOS universal archive
+      - name: Build macOS Intel and Apple silicon archives
         if: matrix.platform == 'macos'
         shell: bash
         run: |
@@ -101,7 +103,7 @@ jobs:
           lipo "$APP/Contents/MacOS/nuist_aio" -verify_arch arm64
           lipo "$APP/Contents/MacOS/nuist_aio" -verify_arch x86_64
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/nuistaio-${RELEASE_TAG}-macos-universal.zip"
+          python3 tools/ci/package_macos.py "$APP" dist "$RELEASE_TAG"
       - name: Build Windows portable archive
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -151,7 +153,27 @@ jobs:
           else
             gh release create "$RELEASE_TAG" dist/* --verify-tag --title "$RELEASE_TAG" --notes-file RELEASE_NOTE.md --latest
           fi
+
+  mirror:
+    name: Mirror attachments to Gitee
+    needs: [metadata, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Generate checksums
+        run: (cd dist && sha256sum nuistaio-* > SHA256SUMS.txt)
       - name: Mirror release to Gitee when configured
+        timeout-minutes: 12
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: python3 tools/ci/publish_gitee.py
+        run: python3 -u tools/ci/publish_gitee.py

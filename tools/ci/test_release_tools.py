@@ -73,7 +73,40 @@ class ReleaseToolsTest(unittest.TestCase):
             fields = api.call_args_list[2].args[2]
             self.assertEqual(fields['body'], Path('RELEASE_NOTE.md').read_text())
             self.assertEqual(fields['target_commitish'], 'a' * 40)
-            self.assertEqual(upload.call_count, 5)
+            self.assertEqual(upload.call_count, 7)
+
+    def test_upload_timeout_closes_connection_and_hides_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'test.apk'
+            file.write_bytes(b'package')
+            with patch.object(publish_gitee.http.client, 'HTTPSConnection') as connect:
+                connection = connect.return_value
+                connection.send.side_effect = TimeoutError('secret-token')
+                with self.assertRaisesRegex(RuntimeError, 'connection failed or timed out') as error:
+                    publish_gitee.upload(7, file, 'secret-token')
+                self.assertNotIn('secret-token', str(error.exception))
+                self.assertEqual(connect.call_args.kwargs['timeout'], 30)
+                connection.close.assert_called_once()
+
+    def test_upload_deadline_stops_slow_transfer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'test.apk'
+            file.write_bytes(b'package')
+            with patch.object(publish_gitee.http.client, 'HTTPSConnection') as connect, \
+                 patch.object(publish_gitee.time, 'monotonic', side_effect=[0, 181]):
+                with self.assertRaisesRegex(RuntimeError, 'exceeded 180 seconds'):
+                    publish_gitee.upload(7, file, 'test-only')
+                connect.return_value.close.assert_called_once()
+
+    def test_release_requires_only_requested_architectures(self):
+        self.assertEqual(expected_assets('v0.5.0'), [
+            'nuistaio-v0.5.0-android-armeabi-v7a.apk',
+            'nuistaio-v0.5.0-android-arm64-v8a.apk',
+            'nuistaio-v0.5.0-ios-unsigned.ipa',
+            'nuistaio-v0.5.0-macos-arm64.zip',
+            'nuistaio-v0.5.0-macos-x86_64.zip',
+            'nuistaio-v0.5.0-windows-x64.zip',
+        ])
 
 
 if __name__ == '__main__':
