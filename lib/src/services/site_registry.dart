@@ -420,7 +420,7 @@ class SchoolBrowserLinks {
       'repair',
       '信大 E 修',
       '生活',
-      '报修 · 需校园网 · 自动使用当前学号',
+      '报修 · 需校园网',
       site: SchoolSiteId.repair,
       url: 'http://xdex.nuist.edu.cn:18080/NUIST-WEB/',
       directProbeMarkers: const [
@@ -444,7 +444,7 @@ class SchoolBrowserLinks {
       'campusBus',
       '信大 E 行',
       '生活',
-      '校园公交查询 · 外网可达 · 系统浏览器',
+      '校园公交查询',
       site: SchoolSiteId.campusBus,
       url: 'http://www.ns-res.cn/hydxflat/indexelct.html',
       standalone: true,

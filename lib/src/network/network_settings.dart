@@ -51,9 +51,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       builder: (context, _) => PageBody(
         children: [
           const SectionTitle('校内资源访问路径'),
-          const Text(
-            '自动模式会在启动和返回前台时按站点检测链路，功能条目和右侧按钮使用相同结果。系统浏览器会话独立，使用 VPN 时可能需要再次登录。',
-          ),
+          const Text('选择访问校内资源的网络路径。因为系统浏览器会话独立，使用 VPN 时可能需要再次登录。'),
           const SizedBox(height: 16),
           for (final mode in CampusNetworkMode.values)
             Card(
@@ -70,7 +68,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   CampusNetworkMode.vpn => '学校 WebVPN',
                 }),
                 subtitle: Text(switch (mode) {
-                  CampusNetworkMode.automatic => '检测各站点直连；不可达时使用已验证的学校 VPN 入口',
+                  CampusNetworkMode.automatic => '检测各站点直连；不可达时使用学校 VPN 入口',
                   CampusNetworkMode.direct => '只使用学校原始地址，不自动切换',
                   CampusNetworkMode.vpn => '只使用官方授权资源的 WebVPN 地址',
                 }),
@@ -154,8 +152,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(status!),
             ),
-          const SectionTitle('后续站点'),
-          const Text('新站点必须先核实官方直连地址、VPN 资源映射和页面读取规则，再加入切换清单。尚未接入的站点不会自动改写地址。'),
         ],
       ),
     ),

@@ -15,6 +15,56 @@
 - **两种风格，随心选择**：MD3 与 MIUIX 自由切换，支持主题配色、深浅色模式，以及 Android 动态取色。
 - **校内校外，灵活访问**：支持校园直连与学校 WebVPN，按站点可达性自动选择常用内网入口的访问路径。
 
+## 界面预览
+
+<details open>
+<summary><strong>首页与功能入口</strong></summary>
+
+<table>
+  <tr>
+    <th width="50%">首页 · 当天课程时间轴</th>
+    <th width="50%">功能 · 常用校园服务</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/首页.png" width="280" alt="首页问候与当天课程时间轴"></td>
+    <td align="center"><img src="assets/功能列表.png" width="280" alt="按学习、生活与资源分类的校园功能列表"></td>
+  </tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>校园账户与电量统计</strong></summary>
+
+<table>
+  <tr>
+    <th width="50%">数据看板 · 常用信息一览</th>
+    <th width="50%">宿舍电费 · 电量变化趋势</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/数据看板.png" width="280" alt="首页数据看板展示假期、校园卡与宿舍电量"></td>
+    <td align="center"><img src="assets/电费统计.png" width="280" alt="宿舍剩余电量与历史电量趋势"></td>
+  </tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>学习通课程与作业</strong></summary>
+
+<table>
+  <tr>
+    <th width="50%">课程 · 任务点完成进度</th>
+    <th width="50%">作业与考试 · 状态汇总</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/课程任务点展示.png" width="280" alt="学习通课程任务点数量与完成进度"></td>
+    <td align="center"><img src="assets/作业汇总.png" width="280" alt="学习通作业和考试的分类与状态汇总"></td>
+  </tr>
+</table>
+
+</details>
+
 ## 功能介绍
 
 ### 课表与教务

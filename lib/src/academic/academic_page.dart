@@ -411,7 +411,6 @@ class _AcademicPageState extends State<AcademicPage> {
             icon: const Icon(Icons.language),
             label: const Text('打开应用内原网页 / 完成额外认证'),
           ),
-          const Text('右上角可使用系统浏览器打开学校页面；系统浏览器与本应用的登录会话相互独立。'),
         ],
       ),
     );

@@ -74,7 +74,7 @@ class AboutActions {
     builder: (dialog) => AlertDialog(
       title: const Text('关于信大 AIO'),
       content: const Text(
-        '为南京信息工程大学同学设计的校园服务整合工具，提供课表、校园账户、图书借阅与校园资讯等功能。\n\n非学校官方应用。密码在学校官方页面输入，会话凭据仅保留在本机。',
+        '为南京信息工程大学同学设计的校园服务整合工具，提供课表、校园账户、图书借阅与校园资讯等功能。\n\n非学校官方应用。密码在学校官方页面输入，会话凭据仅保留在本机。\n\nRetrSoft All rights Reserved.',
       ),
       actions: [
         TextButton(

@@ -89,10 +89,9 @@ class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : widget.link.vpn
-          ? IconButton(
-              tooltip: '按当前网络配置在浏览器打开',
-              onPressed: open,
-              icon: const Icon(Icons.open_in_browser_outlined),
+          ? const Tooltip(
+              message: '按当前网络配置在浏览器打开',
+              child: Icon(Icons.open_in_browser_outlined),
             )
           : Icon(
               widget.link.instructions != null

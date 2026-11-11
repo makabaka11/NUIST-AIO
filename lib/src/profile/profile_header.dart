@@ -56,6 +56,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     final state = widget.state,
         profile = state.studentProfile,
         colors = Theme.of(context).colorScheme;
+    final avatarBytes = state.avatarBytes;
     final name = profile?.name ?? state.displayName ?? '南信同学';
     final bg = avatarColors[state.avatarColor % avatarColors.length];
     final letters = FittedBox(
@@ -84,12 +85,12 @@ class _ProfileHeaderState extends State<ProfileHeader> {
               CircleAvatar(
                 radius: 34,
                 backgroundColor: bg,
-                child: state.avatarBytes == null
+                child: avatarBytes == null
                     ? letters
                     : ClipOval(
                         child: Image.memory(
-                          state.avatarBytes!,
-                          key: ValueKey(state.avatarBytes),
+                          avatarBytes,
+                          key: ValueKey(avatarBytes),
                           width: 68,
                           height: 68,
                           fit: BoxFit.cover,
@@ -141,7 +142,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                             ? (state.connectedAt == null
                                   ? '连接校园账号后显示学生资料'
                                   : '${state.syncingProfile ? '正在读取' : '尚未同步'}学生资料')
-                            : '学号 ${profile.studentNumber}',
+                            : '学号：${profile.studentNumber}',
                         loading: state.syncingProfile,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
@@ -161,7 +162,22 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                 if (info.$2.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: Text('${info.$1}  ${info.$2}'),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: info.$1,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text: '  ${info.$2}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
             ],
             if (state.profileNotice != null)

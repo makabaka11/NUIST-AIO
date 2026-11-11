@@ -18,6 +18,7 @@ class CampusHomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final name = state.displayName;
     final hour = DateTime.now().hour;
     final greeting = hour < 6
         ? '夜深了'
@@ -50,7 +51,7 @@ class CampusHomePage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$greeting，${state.displayName == null ? '同学' : '${state.displayName} 同学'}',
+                      '$greeting，${name == null ? '同学' : '$name 同学'}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.headlineSmall

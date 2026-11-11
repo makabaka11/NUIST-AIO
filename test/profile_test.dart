@@ -214,7 +214,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('测试姓名'), findsOneWidget);
-      expect(find.text('学号 00001234'), findsOneWidget);
+      expect(find.text('学号：00001234'), findsOneWidget);
       expect(find.text('学院  测试学院'), findsOneWidget);
       expect(find.text('课表已导入'), findsNothing);
       final avatarNode = tester.getSemantics(
