@@ -6,19 +6,28 @@ class StatusTag extends StatelessWidget {
   final String label;
   final Color color;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: .12),
-      borderRadius: BorderRadius.circular(7),
-      border: Border.all(color: color.withValues(alpha: .22)),
-    ),
-    child: Text(
-      label,
-      style: Theme.of(context).textTheme.labelSmall
-          ?.copyWith(color: color, fontWeight: FontWeight.w600),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          color.withValues(alpha: .12),
+          colors.surfaceContainer,
+        ),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: .22)),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: colors.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 }
 
 Color categoryAccent(BuildContext context, String category) {

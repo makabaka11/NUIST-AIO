@@ -151,12 +151,15 @@ class BalanceTrendChart extends StatelessWidget {
           ],
           lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
+              getTooltipColor: (_) => theme.colorScheme.surfaceContainerHighest,
+              fitInsideHorizontally: true,
+              fitInsideVertically: true,
               getTooltipItems: (spots) => spots
                   .map(
                     (s) => LineTooltipItem(
                       '¥${s.y.toStringAsFixed(2)}',
                       TextStyle(
-                        color: color,
+                        color: theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
@@ -286,12 +289,15 @@ class ElectricityTrendChart extends StatelessWidget {
           ],
           lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
+              getTooltipColor: (_) => theme.colorScheme.surfaceContainerHighest,
+              fitInsideHorizontally: true,
+              fitInsideVertically: true,
               getTooltipItems: (spots) => spots
                   .map(
                     (s) => LineTooltipItem(
                       '${s.y.toStringAsFixed(2)} $unit',
                       TextStyle(
-                        color: color,
+                        color: theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
@@ -376,6 +382,8 @@ class MonthlySpendingChart extends StatelessWidget {
                     }
                   },
                   touchTooltipData: BarTouchTooltipData(
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       final m = months[group.x];
                       return BarTooltipItem(
@@ -425,7 +433,7 @@ class MonthlySpendingChart extends StatelessWidget {
                               textAlign: TextAlign.center,
                               style: style.copyWith(
                                 color: i == selectedIndex
-                                    ? color
+                                    ? theme.colorScheme.onSurface
                                     : theme.colorScheme.onSurfaceVariant,
                               ),
                             ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../services/site_registry.dart';
 import '../services/sso_diagnostics.dart';
+import '../services/script_result.dart';
 import 'current_term.dart';
 
 const chaoxingHosts = {
@@ -130,6 +132,50 @@ class ChaoxingItem {
   }
 }
 
+class ChaoxingCourse {
+  const ChaoxingCourse({
+    required this.key,
+    required this.title,
+    required this.alias,
+    required this.url,
+    this.completed,
+    this.total,
+    this.updatedAt,
+    this.failed = false,
+  });
+  final String key, title, alias;
+  final Uri url;
+  final int? completed, total;
+  final DateTime? updatedAt;
+  final bool failed;
+  bool get hasProgress => completed != null && total != null;
+  ChaoxingCourse withProgress(int completed, int total) {
+    if (completed < 0 || total < completed || total > 1000000) {
+      throw const FormatException('任务点统计无效。');
+    }
+    return ChaoxingCourse(
+      key: key,
+      title: title,
+      alias: alias,
+      url: url,
+      completed: completed,
+      total: total,
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  ChaoxingCourse markFailed() => ChaoxingCourse(
+    key: key,
+    title: title,
+    alias: alias,
+    url: url,
+    completed: completed,
+    total: total,
+    updatedAt: updatedAt,
+    failed: true,
+  );
+}
+
 /// No automatic traffic: official login, explicit read-only verification, then
 /// separate manual scan. Native WebView owns cookies; cache is memory only.
 class ChaoxingRepository extends ChangeNotifier {
@@ -157,6 +203,7 @@ class ChaoxingRepository extends ChangeNotifier {
   bool noticeIsError = false;
   String progress = '';
   List<ChaoxingItem> items = [];
+  List<ChaoxingCourse> courses = [];
   DateTime? updatedAt, busyUntil;
   List<Map<String, dynamic>> _courses = [];
   bool get supported =>
@@ -320,7 +367,7 @@ class ChaoxingRepository extends ChangeNotifier {
         try {
           final result = await _controller!
               .callAsyncJavaScript(
-                functionBody: script,
+                functionBody: schoolScriptBody(script),
                 arguments: {
                   'task': task,
                   'expectedUrl': nativeUrl,
@@ -345,8 +392,11 @@ class ChaoxingRepository extends ChangeNotifier {
             type: result?.value.runtimeType.toString(),
             ok: result?.error == null,
           );
-          if (result?.value is Map && result?.error == null) {
-            data = Map<String, dynamic>.from(result!.value as Map);
+          if (result?.error == null && result?.value != null) {
+            final value = result!.value is String
+                ? jsonDecode(result.value as String)
+                : result.value;
+            if (value is Map) data = Map<String, dynamic>.from(value);
           }
         } catch (failure) {
           check(token);
@@ -455,7 +505,9 @@ class ChaoxingRepository extends ChangeNotifier {
     } finally {
       if (identical(_pending, pending)) {
         _pending = null;
-        if (token == generation) await _controller?.stopLoading();
+        if (token == generation) {
+          await _controller?.stopLoading();
+        }
       }
     }
   }
@@ -523,6 +575,28 @@ class ChaoxingRepository extends ChangeNotifier {
       totalCourseCount = _courses.length;
       _courses = _courses.where(scope.includes).toList();
       selectedCourseCount = _courses.length;
+      final previousCourses = scanTerm == scope.term
+          ? {for (final c in courses) c.key: c}
+          : <String, ChaoxingCourse>{};
+      courses = _courses.map((c) {
+        final key = '${c['courseId']}:${c['classId']}';
+        final previous = previousCourses[key];
+        return ChaoxingCourse(
+          key: key,
+          title: c['title'] as String,
+          alias: c['alias'] as String? ?? '',
+          url: Uri.https('mooc1.chaoxing.com', '/visit/stucoursemiddle', {
+            'courseid': c['courseId'],
+            'clazzid': c['classId'],
+            'cpi': c['cpi'],
+            'ismooc2': '1',
+            'v': '2',
+          }),
+          completed: previous?.completed,
+          total: previous?.total,
+          updatedAt: previous?.updatedAt,
+        );
+      }).toList();
       scanTerm = scope.term;
       // A different semester must not leave old tasks in this semester's list.
       final keys = _courses
@@ -553,7 +627,45 @@ class ChaoxingRepository extends ChangeNotifier {
           check(token);
           failed.add('$title：课程入口未读取');
         }
+        if (meta == null) {
+          courses[i] = courses[i].markFailed();
+          changed();
+        }
         if (meta != null) {
+          try {
+            final result = await _read(
+              SchoolSites.chaoxingProgressEntry.replace(
+                queryParameters: {
+                  'courseid': c['courseId'],
+                  'clazzid': c['classId'],
+                  'cpi': c['cpi'],
+                  'enc': meta['stuenc'],
+                  'openc': meta['openc'] as String? ?? '',
+                  'fromMiddle': '1',
+                  'ut': 's',
+                  't': '${DateTime.now().millisecondsSinceEpoch}',
+                },
+              ),
+              'progress',
+              token,
+            );
+            check(token);
+            final counts = result['progress'];
+            if (counts is! Map ||
+                counts['completed'] is! int ||
+                counts['total'] is! int) {
+              throw const FormatException('任务点统计未读取。');
+            }
+            courses[i] = courses[i].withProgress(
+              counts['completed'] as int,
+              counts['total'] as int,
+            );
+          } catch (_) {
+            check(token);
+            courses[i] = courses[i].markFailed();
+            failed.add('$title：任务点未读取');
+          }
+          changed();
           for (final kind in ['work', 'exam']) {
             try {
               if (kind == 'work' && meta['workEnc'] == '') {
@@ -644,6 +756,7 @@ class ChaoxingRepository extends ChangeNotifier {
     verified = false;
     busy = false;
     items = [];
+    courses = [];
     _courses = [];
     scanTerm = null;
     totalCourseCount = 0;

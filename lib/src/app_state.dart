@@ -20,6 +20,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/session_store.dart';
 import 'network/campus_network.dart';
+import 'network/link_detector.dart';
+import 'updates/update_service.dart';
 import 'schedule/schedule.dart';
 import 'accounts/accounts.dart';
 import 'services/service_sessions.dart';
@@ -56,9 +58,12 @@ class AppState extends ChangeNotifier {
     ServiceSession? librarySession,
     PublicHolidayRepository? holidayRepository,
     BulletinRepository? bulletinRepository,
+    CampusLinkDetector? linkDetector,
+    UpdateController? updateController,
     AvatarStore? avatarStore,
     ChaoxingRepository? chaoxingRepository,
-  }) : holidayRepository = holidayRepository ?? PublicHolidayRepository(),
+  }) : updates = updateController ?? UpdateController(),
+       holidayRepository = holidayRepository ?? PublicHolidayRepository(),
        chaoxing = chaoxingRepository ?? ChaoxingRepository(),
        avatars = avatarStore ?? AvatarStore(),
        bulletins = bulletinRepository ?? BulletinRepository(),
@@ -75,7 +80,25 @@ class AppState extends ChangeNotifier {
          SchoolSiteId.teaching:
              teachingSession ??
              NativeServiceSession(site: SchoolSites.get(SchoolSiteId.teaching)),
-       };
+       } {
+    networkLinks =
+        linkDetector ??
+        CampusLinkDetector(directory: () => bulletins.vpn.query('probe', {}));
+    networkLinks.addListener(_networkChanged);
+  }
+  final UpdateController updates;
+  late final CampusLinkDetector networkLinks;
+  void _networkChanged() {
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> detectNetworkLinks({bool force = false}) async {
+    if (_disposed || networkMode != CampusNetworkMode.automatic) return;
+    await networkLinks.detect(force: force);
+  }
+
+  Future<Uri> resolveBrowserLink(SchoolBrowserLink link) => networkLinks
+      .resolve(link, networkMode, studentNumber: studentProfile?.studentNumber);
   final ChaoxingRepository chaoxing;
   Future<bool> connectChaoxing() async {
     if (chaoxing.busy) return false;
@@ -393,8 +416,11 @@ class AppState extends ChangeNotifier {
   Future<void> setNetworkMode(CampusNetworkMode value) async {
     await _prefs.setString('networkMode', value.name);
     networkMode = value;
+    networkLinks.reset();
     await bulletins.close();
+    if (_disposed) return;
     notifyListeners();
+    unawaited(detectNetworkLinks());
   }
 
   ServiceSession get portalSession => serviceSessions[SchoolSiteId.portal]!;
@@ -582,6 +608,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> resetServiceSessions() async {
     _serviceSyncId++;
+    networkLinks.reset();
     await bulletins.close();
     await chaoxing.close(clearCookies: true);
     connectingServices = false;
@@ -652,6 +679,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> clearPrivateData() async {
+    networkLinks.reset();
     _libraryRequest++;
     _calendarRequest++;
     libraryVerified = false;
@@ -723,6 +751,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    await updates.loadSettings();
     try {
       onboarded = await _prefs.getBool('onboarded') ?? false;
       dashboardLayout = DashboardLayout.decode(
@@ -814,6 +843,9 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    updates.dispose();
+    networkLinks.removeListener(_networkChanged);
+    networkLinks.dispose();
     chaoxing.dispose();
     bulletins.close();
     sessionGeneration++;
@@ -871,6 +903,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> sessionChanged() async {
     sessions.invalidatePortalRead();
+    networkLinks.reset();
     connectedAt = await sessions.connectionTime();
     displayName = await sessions.displayName();
     if (connectedAt == null) {

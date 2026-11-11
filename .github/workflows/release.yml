@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: version
+        name: Validate tag and release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 tools/ci/release_metadata.py
+
+  checks:
+    uses: ./.github/workflows/checks.yml
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: [metadata, checks]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            os: ubuntu-24.04
+          - platform: ios
+            os: macos-15
+          - platform: macos
+            os: macos-15
+          - platform: windows
+            os: windows-2022
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+      RELEASE_BUILD: ${{ needs.metadata.outputs.build }}
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - uses: actions/setup-java@v4
+        if: matrix.platform == 'android'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Resolve dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Restore existing Android release key
+        if: matrix.platform == 'android'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: python3 tools/ci/restore_android_key.py
+      - name: Build signed APK
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          flutter build apk --release --build-name="$RELEASE_VERSION" --build-number="$RELEASE_BUILD"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/nuistaio-${RELEASE_TAG}-android-universal.apk"
+      - name: Build unsigned IPA for re-signing
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          flutter build ios --release --no-codesign --build-name="$RELEASE_VERSION" --build-number="$RELEASE_BUILD"
+          mkdir -p build/ios/package/Payload dist
+          ditto build/ios/iphoneos/Runner.app build/ios/package/Payload/Runner.app
+          (cd build/ios/package && zip -qry "$GITHUB_WORKSPACE/dist/nuistaio-${RELEASE_TAG}-ios-unsigned.ipa" Payload)
+      - name: Build macOS universal archive
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          flutter build macos --release --build-name="$RELEASE_VERSION" --build-number="$RELEASE_BUILD"
+          APP="build/macos/Build/Products/Release/nuist_aio.app"
+          lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/nuist_aio"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/nuistaio-${RELEASE_TAG}-macos-universal.zip"
+      - name: Build Windows portable archive
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          flutter build windows --release --build-name=$env:RELEASE_VERSION --build-number=$env:RELEASE_BUILD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "dist/nuistaio-$env:RELEASE_TAG-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Remove restored signing files
+        if: always() && matrix.platform == 'android'
+        shell: bash
+        run: rm -f android/key.properties android/keystore/nuistaio-release.jks
+
+  publish:
+    name: Publish GitHub Release
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Publish all four platforms together
+        shell: bash
+        run: |
+          python3 tools/ci/check_assets.py dist "$RELEASE_TAG"
+          (cd dist && sha256sum nuistaio-* > SHA256SUMS.txt)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file RELEASE_NOTE.md --draft=false --prerelease=false --latest
+          else
+            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "$RELEASE_TAG" --notes-file RELEASE_NOTE.md --latest
+          fi
+      - name: Mirror release to Gitee when configured
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: python3 tools/ci/publish_gitee.py

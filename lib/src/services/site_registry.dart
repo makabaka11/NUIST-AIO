@@ -97,6 +97,12 @@ class SchoolSite {
 }
 
 class SchoolSites {
+  // Chapter overview discovered in the official course UI protocol; data is
+  // accepted only when its explicit completed/total task summary validates.
+  static final chaoxingProgressEntry = Uri.https(
+    'mooc2-ans.chaoxing.com',
+    '/mooc2-ans/mycourse/studentcourse',
+  );
   static final all = List<SchoolSite>.unmodifiable([
     SchoolSite(
       id: SchoolSiteId.chaoxing,
@@ -110,6 +116,8 @@ class SchoolSites {
       auth: SiteAuth.unverified,
       onDemand: true,
       features: const [
+        SiteFeature('chaoxingCourses', '本学期学习通课程'),
+        SiteFeature('chaoxingProgress', '课程任务点进度'),
         SiteFeature('chaoxingWork', '学习通作业'),
         SiteFeature('chaoxingExam', '学习通考试'),
       ],
@@ -352,12 +360,16 @@ class SchoolBrowserLink {
     this.studentNumber = false,
     this.standalone = false,
     this.instructions,
+    this.directProbeMarkers = const [],
   }) : entry = url == null ? null : Uri.parse(url);
   final String id, name, group, detail;
   final SchoolSiteId site;
   final Uri? entry;
   final bool vpn, studentNumber, standalone;
   final String? instructions;
+
+  /// Anonymous HTML signatures for route reachability, never an auth probe.
+  final List<String> directProbeMarkers;
   Uri resolve({String? number}) {
     final uri = entry;
     if (uri == null) throw const FormatException('此功能请在企业微信工作台打开。');
@@ -392,6 +404,7 @@ class SchoolBrowserLinks {
       '需校园网 · 支持 WebVPN 入口',
       site: SchoolSiteId.studentAffairs,
       url: 'http://stu.nuist.edu.cn/login.aspx',
+      directProbeMarkers: const ['奥蓝学生管理信息系统'],
       vpn: true,
       standalone: true,
     ),
@@ -410,6 +423,11 @@ class SchoolBrowserLinks {
       '报修 · 需校园网 · 自动使用当前学号',
       site: SchoolSiteId.repair,
       url: 'http://xdex.nuist.edu.cn:18080/NUIST-WEB/',
+      directProbeMarkers: const [
+        '南京信息工程大学',
+        './static/config.js',
+        './static/js/app.',
+      ],
       vpn: true,
       studentNumber: true,
       standalone: true,
@@ -450,4 +468,20 @@ class PublicHolidaySource {
   static const documentation = 'https://apisbo.com/docs/holidays/year/';
   static Uri year(int year) =>
       Uri.https('api.apisbo.com', '/holidays/year/$year');
+}
+
+/// Application-owned public update sources. Never use a school session here.
+class AppReleaseSources {
+  static final github = Uri.parse('https://github.com/makabaka11/NUIST-AIO');
+  static final gitee = Uri.parse('https://gitee.com/ded_retr0/NUIST-AIO');
+  static Uri get githubReleases => Uri.https(
+    'api.github.com',
+    '/repos${github.path}/releases',
+    {'per_page': '100'},
+  );
+  static Uri get giteeReleases => Uri.https(
+    'gitee.com',
+    '/api/v5/repos${gitee.path}/releases',
+    {'page': '1', 'per_page': '100'},
+  );
 }

@@ -113,11 +113,13 @@ class MiuixAboutPage extends StatelessWidget {
                   ),
                 ),
                 group([
+                  row('项目仓库', () => AboutActions.repositories(context)),
                   row(
                     '交流与反馈',
                     () => AboutActions.feedback(context),
                     summary: '信大AIO交流群 · 1135530515',
                   ),
+                  row('赞赏码', () => AboutActions.appreciation(context)),
                   row(
                     '关于信大 AIO',
                     () => AboutActions.introduction(context),

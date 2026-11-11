@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' as md;
@@ -18,6 +19,7 @@ import 'package:nuist_aio/src/accounts/accounts.dart';
 import 'package:nuist_aio/src/accounts/accounts_page.dart';
 import 'package:nuist_aio/src/accounts/reports.dart';
 import 'package:nuist_aio/src/theme_settings.dart';
+import 'package:nuist_aio/src/status_tag.dart';
 
 void main() {
   setUp(() {
@@ -45,6 +47,108 @@ void main() {
         builder: (_) =>
             md.Scaffold(body: md.SingleChildScrollView(child: child)),
       ),
+    );
+  }
+
+  for (final style in UiStyle.values) {
+    testWidgets(
+      '$style chart tooltips, container text and status tags stay readable',
+      (tester) async {
+        final state = await mount(tester, style);
+        final time = DateTime(2026, 10);
+        push(
+          tester,
+          md.Column(
+            children: [
+              BalanceTrendChart(
+                snapshots: [
+                  WalletSnapshot(time, 1000),
+                  WalletSnapshot(time.add(const Duration(days: 1)), 1500),
+                ],
+                range: TimeRange.all,
+                color: md.Colors.black,
+              ),
+              ElectricityTrendChart(
+                snapshots: [
+                  ElectricitySnapshot(time, 30, '度', '正常', 'room'),
+                  ElectricitySnapshot(
+                    time.add(const Duration(days: 1)),
+                    29,
+                    '度',
+                    '正常',
+                    'room',
+                  ),
+                ],
+                range: TimeRange.all,
+                color: md.Colors.black,
+              ),
+              const MonthlySpendingChart(
+                months: [MonthlySpending('2026-10', 1000, 0, 1)],
+              ),
+              const StatusTag('状态示例', color: md.Color(0xff888888)),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        for (final mode in [md.ThemeMode.light, md.ThemeMode.dark]) {
+          await state.setMode(mode);
+          final palettes = style == UiStyle.material3
+              ? CampusPalette.values
+              : [state.palette];
+          for (final palette in palettes) {
+            await state.setPalette(palette);
+            await tester.pumpAndSettle();
+            final colors = md.Theme.of(tester.element(find.byType(StatusTag)))
+                .colorScheme;
+            expectReadable(colors.onPrimaryContainer, colors.primaryContainer);
+            expectReadable(
+              colors.onTertiaryContainer,
+              colors.tertiaryContainer,
+            );
+            expectReadable(
+              colors.onSecondaryContainer,
+              colors.secondaryContainer,
+            );
+            expect(find.byType(LineChart), findsNWidgets(2));
+            for (final chart in tester.widgetList<LineChart>(
+              find.byType(LineChart),
+            )) {
+              final bar = chart.data.lineBarsData.single;
+              final spot = LineBarSpot(bar, 0, bar.spots.last);
+              final tooltip = chart.data.lineTouchData.touchTooltipData;
+              final item = tooltip.getTooltipItems([spot]).single!;
+              expectReadable(
+                item.textStyle.color!,
+                tooltip.getTooltipColor(spot),
+              );
+            }
+            final bar = tester.widget<BarChart>(find.byType(BarChart)).data;
+            final group = bar.barGroups.single;
+            final tooltip = bar.barTouchData.touchTooltipData;
+            final item = tooltip.getTooltipItem(
+              group,
+              0,
+              group.barRods.single,
+              0,
+            )!;
+            expectReadable(
+              item.textStyle.color!,
+              tooltip.getTooltipColor(group),
+            );
+            final tag = tester.widget<md.Container>(
+              find.descendant(
+                of: find.byType(StatusTag),
+                matching: find.byType(md.Container),
+              ),
+            );
+            final tagText = tester.widget<md.Text>(find.text('状态示例'));
+            expectReadable(
+              tagText.style!.color!,
+              (tag.decoration! as md.BoxDecoration).color!,
+            );
+          }
+        }
+      },
     );
   }
 
@@ -466,3 +570,16 @@ void main() {
 }
 
 void ignoreMonth(int _) {}
+
+void expectReadable(md.Color foreground, md.Color background) {
+  final text = md.Color.alphaBlend(foreground, background).computeLuminance();
+  final fill = background.computeLuminance();
+  final ratio = text > fill
+      ? (text + .05) / (fill + .05)
+      : (fill + .05) / (text + .05);
+  expect(
+    ratio,
+    greaterThanOrEqualTo(4.5),
+    reason: '$foreground on $background',
+  );
+}

@@ -152,7 +152,7 @@ class _BalanceHistoryReportState extends State<BalanceHistoryReport> {
               '¥ ${money(point.balanceCents)}',
               key: const ValueKey('selected-wallet-balance'),
               style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(color: widget.color),
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
           ],
         ),

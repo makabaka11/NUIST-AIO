@@ -6,8 +6,8 @@ try {
   const path = location.pathname.split(';')[0];
   const context = {documentHost:location.hostname,
     documentPath:/^\/[a-zA-Z0-9_./-]{0,160}$/.test(path) ? path : ''};
-  const query = location.href.split('#')[0].split('?').slice(1).join('?');
-  const parameter = name => {
+  const parameter = (name, href = location.href) => {
+    const query = href.split('#')[0].split('?').slice(1).join('?');
     for (const part of query.split('&')) {
       const split = part.indexOf('=');
       if (decodeURIComponent(split < 0 ? part : part.slice(0,split)) === name) {
@@ -25,14 +25,16 @@ try {
       return {ok:false,code:'pending',...context};
     }
   }
-  for (const [expected, names] of [
+  const identity = [
     [typeof requestedCourseId === 'string' ? requestedCourseId : '', ['courseid','courseId']],
     [typeof requestedClassId === 'string' ? requestedClassId : '', ['clazzid','classid','classId']],
     [typeof requestedCpi === 'string' ? requestedCpi : '', ['cpi']],
-  ]) {
-    const actual = names.map(parameter).find(Boolean);
-    if (expected && actual && actual !== expected) return {ok:false,code:'pending',...context};
-  }
+  ];
+  const matchesCourse = (href, strict = false) => identity.every(([expected,names]) => {
+    const actual = names.map(name => parameter(name,href)).find(Boolean);
+    return !expected || (actual ? actual === expected : !strict);
+  });
+  if (!matchesCourse(location.href)) return {ok:false,code:'pending',...context};
   const status = globalThis.performance?.getEntriesByType?.('navigation')?.[0]?.responseStatus;
   if (status === 202 || status === 429) return {ok:false,code:'busy'};
   if (status >= 400) return {ok:false,code:'parse',stage:'http_status',httpStatus:status};
@@ -55,6 +57,52 @@ try {
     }
     return {ok:true, courses};
   }
+  if (task === 'progress') {
+    if (path !== '/visit/stucoursemiddle' && !/^\/(?:mooc2-ans\/|mooc-ans\/)?mycourse\//.test(path)) {
+      return {ok:false,code:'pending',...context};
+    }
+    const readings = new Set(), documents = new Set();
+    let chapterUrl = '';
+    const inspect = (doc, depth) => {
+      if (!doc || documents.has(doc) || depth > 2) return;
+      documents.add(doc);
+      const content = doc.body?.cloneNode?.(true) || doc.body;
+      for (const node of content?.querySelectorAll?.('script,style,template,noscript') || []) node.remove();
+      const body = content?.textContent || content?.innerText || '';
+      const pattern = /(?:已完成任务点|任务点已完成)\s*[:：]?\s*(\d+)\s*[\/／]\s*(\d+)/g;
+      for (const match of body.matchAll(pattern)) {
+        const completed = Number(match[1]), total = Number(match[2]);
+        if (!Number.isSafeInteger(completed) || !Number.isSafeInteger(total) || completed > total || total > 1000000) throw Error();
+        readings.add(completed + '/' + total);
+      }
+      for (const frame of doc.querySelectorAll('iframe')) {
+        const target = doc.createElement('a');
+        target.href = frame.getAttribute('src') || '';
+        if (target.protocol !== 'https:' || !hosts.includes(target.hostname) ||
+            target.username || target.password || (target.port && target.port !== '443') ||
+            !/^\/(?:mooc2-ans\/|mooc-ans\/)?mycourse\//.test(target.pathname) ||
+            !matchesCourse(target.href,true)) continue;
+        if (target.hostname !== location.hostname) {
+          // Follow only the official course iframe URL, once, in the resident
+          // WebView. Never copy cookies or fetch a guessed chapter endpoint.
+          chapterUrl ||= target.href;
+          continue;
+        }
+        try {
+          if (frame.contentWindow?.location.href.split('#')[0] !== target.href.split('#')[0]) continue;
+          inspect(frame.contentDocument, depth + 1);
+        } catch (_) { /* Cross-origin frames remain isolated. */ }
+      }
+    };
+    inspect(document, 0);
+    if (readings.size > 1) throw Error();
+    if (readings.size === 1) {
+      const [completed,total] = [...readings][0].split('/').map(Number);
+      return {ok:true,progress:{completed,total}};
+    }
+    if (chapterUrl) return {ok:true,progress:null,chapterUrl};
+    return {ok:false,code:'pending',...context};
+  }
   if (task === 'meta') {
     // Course-middle can render hidden fields without an enc in its URL, or
     // navigate to studentcourse. Never parse an unrelated trusted-host page.
@@ -72,7 +120,9 @@ try {
     if (!stuenc || (document.readyState && document.readyState !== 'complete' && !valid(workEnc))) {
       return {ok:false,code:'pending',...context,httpStatus:status,shape:'domEnc:'+String(pageEnc?.length || 0)+',urlEnc:'+String(urlEnc?.length || 0)+',workEnc:'+String(workEnc?.length || 0)};
     }
-    return {ok:true, stuenc, workEnc:valid(workEnc) ? workEnc : '',...context,httpStatus:status};
+    const openc = document.querySelector('#openc')?.value || '';
+    return {ok:true, stuenc, workEnc:valid(workEnc) ? workEnc : '',
+      openc:/^[a-zA-Z0-9_-]{0,256}$/.test(openc) ? openc : '',...context,httpStatus:status};
   }
   if (!['work','exam'].includes(task)) throw Error();
   if (location.hostname !== 'mooc1.chaoxing.com' || location.pathname !== (task === 'work' ? '/mooc2/work/list' : '/exam-ans/mooc2/exam/exam-list')) return {ok:false,code:'pending',...context};

@@ -55,11 +55,23 @@ class MaterialAboutPage extends StatelessWidget {
                 child: Column(
                   children: [
                     ListTile(
+                      leading: const Icon(Icons.source_outlined),
+                      title: const Text('项目仓库'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => AboutActions.repositories(context),
+                    ),
+                    ListTile(
                       leading: const Icon(Icons.forum_outlined),
                       title: const Text('交流与反馈'),
                       subtitle: const Text('信大AIO交流群 · 1135530515'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => AboutActions.feedback(context),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.volunteer_activism_outlined),
+                      title: const Text('赞赏码'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => AboutActions.appreciation(context),
                     ),
                     ListTile(
                       leading: const Icon(Icons.info_outline),

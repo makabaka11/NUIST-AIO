@@ -502,19 +502,12 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
     final balance = card.electronicCents;
     final updated = cache.wallet!.updatedAt;
     return [
-      // 余额渐变卡片
+      // 余额概览
       Container(
         width: double.infinity,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colors.primaryContainer,
-              colors.primaryContainer.withValues(alpha: 0.7),
-            ],
-          ),
+          color: colors.primaryContainer,
         ),
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -532,9 +525,8 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                   Expanded(
                     child: Text(
                       '校园卡余额',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: colors.onPrimaryContainer.withValues(alpha: 0.9),
-                      ),
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(color: colors.onPrimaryContainer),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -544,7 +536,11 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: colors.onPrimaryContainer.withValues(alpha: 0.2),
+                      border: Border.all(
+                        color: colors.onPrimaryContainer.withValues(
+                          alpha: 0.35,
+                        ),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -567,17 +563,15 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
               const SizedBox(height: 8),
               Text(
                 '采集于 ${updated.month}-${updated.day.toString().padLeft(2, '0')} ${updated.hour.toString().padLeft(2, '0')}:${updated.minute.toString().padLeft(2, '0')}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colors.onPrimaryContainer.withValues(alpha: 0.7),
-                ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: colors.onPrimaryContainer),
               ),
               if (card.lost || card.frozen) ...[
                 const SizedBox(height: 8),
                 Text(
                   [if (card.lost) '已挂失', if (card.frozen) '已冻结'].join(' · '),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colors.onPrimaryContainer.withValues(alpha: 0.8),
-                  ),
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: colors.onPrimaryContainer),
                 ),
               ],
             ],
@@ -746,9 +740,8 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                   const SizedBox(height: 8),
                   Text(
                     cache.electricity!.status,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSecondaryContainer.withValues(alpha: 0.7),
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: colors.onSecondaryContainer),
                   ),
                   for (final entry in cache.electricity!.fields.entries.where(
                     (e) => e.key != cache.electricity!.primary.key,
@@ -757,11 +750,8 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
                         '${entry.key}：${entry.value}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSecondaryContainer.withValues(
-                            alpha: 0.7,
-                          ),
-                        ),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: colors.onSecondaryContainer),
                       ),
                     ),
                 ],
@@ -862,7 +852,7 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
             Text(
               '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(2)} ${points.first.unit}',
               style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(color: colors.primary),
+                  ?.copyWith(color: colors.onSurface),
             ),
           ],
         ),
@@ -965,14 +955,7 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
           width: double.infinity,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                colors.tertiaryContainer,
-                colors.tertiaryContainer.withValues(alpha: 0.7),
-              ],
-            ),
+            color: colors.tertiaryContainer,
           ),
           child: Padding(
             padding: const EdgeInsets.all(28),
@@ -981,19 +964,16 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.bar_chart,
-                      color: Colors.white70,
+                      color: colors.onTertiaryContainer,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       '${data.month.substring(5)}月消费',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: colors.onTertiaryContainer.withValues(
-                          alpha: 0.9,
-                        ),
-                      ),
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(color: colors.onTertiaryContainer),
                     ),
                   ],
                 ),
@@ -1008,9 +988,8 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                 const SizedBox(height: 8),
                 Text(
                   '学校接口月度汇总 · 共 ${data.total} 笔交易',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onTertiaryContainer.withValues(alpha: 0.7),
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colors.onTertiaryContainer),
                 ),
               ],
             ),
@@ -1115,7 +1094,7 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                     trailing: Text(
                       '¥ ${record.amount}',
                       style: TextStyle(
-                        color: record.income ? colors.primary : colors.tertiary,
+                        color: colors.onSurface,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

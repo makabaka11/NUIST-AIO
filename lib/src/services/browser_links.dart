@@ -3,34 +3,8 @@ import '../campus_ui.dart';
 import '../academic/official_page.dart';
 import '../app_state.dart';
 import '../network/campus_network.dart';
+export '../network/external_link_route.dart' show externalVpnUri;
 import 'site_registry.dart';
-import 'navigation.dart';
-
-Uri externalVpnUri(Uri original, Map<String, dynamic> routes) {
-  if (!SchoolBrowserLinks.all.any(
-    (l) => l.vpn && l.entry?.origin == original.origin,
-  )) {
-    throw const FormatException('该站点尚未登记 VPN 入口。');
-  }
-  final value = routes[original.origin];
-  if (value is! String) {
-    throw const FormatException('学校授权目录没有此站点，请在系统浏览器的 VPN 首页确认访问权限。');
-  }
-  final proxy = Uri.tryParse(value);
-  if (proxy == null ||
-      !SchoolNavigation.trusted(proxy, {'client.vpn.nuist.edu.cn'}) ||
-      proxy.hasQuery ||
-      proxy.hasFragment ||
-      !RegExp('^/${original.scheme}/webvpn[0-9a-f]{64}\$')
-          .hasMatch(proxy.path)) {
-    throw const FormatException('学校 VPN 入口未通过校验。');
-  }
-  return proxy.replace(
-    path: proxy.path + original.path,
-    query: original.hasQuery ? original.query : null,
-    fragment: original.hasFragment ? original.fragment : null,
-  );
-}
 
 class SchoolBrowserEntryTile extends StatefulWidget {
   const SchoolBrowserEntryTile({
@@ -46,7 +20,7 @@ class SchoolBrowserEntryTile extends StatefulWidget {
 
 class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
   bool busy = false;
-  Future<void> open({bool vpn = false}) async {
+  Future<void> open() async {
     if (busy) return;
     final link = widget.link;
     if (link.instructions != null) {
@@ -68,20 +42,7 @@ class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
     setState(() => busy = true);
     final generation = widget.state.sessionGeneration;
     try {
-      var url = link.resolve(
-        number: widget.state.studentProfile?.studentNumber,
-      );
-      if (vpn) {
-        final probe = await widget.state.bulletins.vpn.query('probe', {});
-        if (!mounted || generation != widget.state.sessionGeneration) return;
-        if (probe['ok'] != true || probe['ready'] != true) {
-          throw const FormatException('请先在网络设置连接学校 VPN，或在系统浏览器打开学校 VPN 首页。');
-        }
-        url = externalVpnUri(
-          url,
-          Map<String, dynamic>.from(probe['routes'] as Map? ?? {}),
-        );
-      }
+      final url = await widget.state.resolveBrowserLink(link);
       if (mounted && generation == widget.state.sessionGeneration) {
         await launchSchoolBrowser(context, url);
       }
@@ -91,7 +52,8 @@ class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
       }
     } catch (_) {
       if (mounted) {
-        showCampusSnackBar(context, 
+        showCampusSnackBar(
+          context,
           const SnackBar(content: Text('入口暂不可用，请稍后重试或从学校 VPN 首页进入。')),
         );
       }
@@ -101,41 +63,53 @@ class _SchoolBrowserEntryTileState extends State<SchoolBrowserEntryTile> {
   }
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-    leading: Icon(
-      widget.link.instructions != null
-          ? Icons.chat_bubble_outline
-          : widget.link.id == 'campusBus'
-          ? Icons.directions_bus_outlined
-          : Icons.open_in_new,
-      color: Theme.of(context).colorScheme.primary,
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.state,
+    builder: (context, _) => ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      leading: Icon(
+        widget.link.instructions != null
+            ? Icons.chat_bubble_outline
+            : widget.link.id == 'campusBus'
+            ? Icons.directions_bus_outlined
+            : Icons.open_in_new,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: Text(widget.link.name),
+      subtitle: Text(
+        widget.link.vpn
+            ? '${widget.link.detail} · ${_routeLabel()}'
+            : widget.link.detail,
+      ),
+      onTap: busy ? null : open,
+      trailing: busy
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : widget.link.vpn
+          ? IconButton(
+              tooltip: '按当前网络配置在浏览器打开',
+              onPressed: open,
+              icon: const Icon(Icons.open_in_browser_outlined),
+            )
+          : Icon(
+              widget.link.instructions != null
+                  ? Icons.info_outline
+                  : Icons.open_in_new,
+            ),
     ),
-    title: Text(widget.link.name),
-    subtitle: Text(widget.link.detail),
-    onTap: busy
-        ? null
-        : () => open(
-            vpn:
-                widget.link.vpn &&
-                widget.state.networkMode == CampusNetworkMode.vpn,
-          ),
-    trailing: busy
-        ? const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
-        : widget.link.vpn
-        ? IconButton(
-            tooltip: '通过学校 WebVPN 在浏览器打开',
-            onPressed: () => open(vpn: true),
-            icon: const Icon(Icons.vpn_lock_outlined),
-          )
-        : Icon(
-            widget.link.instructions != null
-                ? Icons.info_outline
-                : Icons.open_in_new,
-          ),
   );
+  String _routeLabel() {
+    final mode = widget.state.networkMode;
+    if (mode == CampusNetworkMode.direct) return '手动直连';
+    if (mode == CampusNetworkMode.vpn) return '手动 VPN';
+    final detector = widget.state.networkLinks,
+        status = detector.results[widget.link.id];
+    if (status?.path == CampusPath.direct) return '自动：直连';
+    if (status?.path == CampusPath.vpn) return '自动：VPN';
+    if (detector.checking) return '正在检测链路';
+    return status?.error == null ? '待检测链路' : '链路不可用';
+  }
 }

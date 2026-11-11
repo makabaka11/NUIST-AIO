@@ -7,9 +7,9 @@ function node({label='第一章; 未提交',status='',title='',url='/work/detail
  return {hasAttribute:()=>true,getAttribute:k=>k==='aria-label'?label:k==='data'?url:null,
  querySelector:s=>s==='.right-content'?{}:s==='.status'?{textContent:status}:s==='.overHidden2'?{textContent:title}:s==='.time'?{textContent:time}:null};
 }
-async function run({task='work',text='',nodes=[node()],url='https://mooc1.chaoxing.com/mooc2/work/list',workEnc='',pageEnc='',readyState='complete',URLConstructor=URL,expectedUrl='',requestedCourseId='',requestedClassId='',requestedCpi='',responseStatus=200}={}){
+async function run({task='work',text='',nodes=[node()],url='https://mooc1.chaoxing.com/mooc2/work/list',workEnc='',pageEnc='',readyState='complete',URLConstructor=URL,expectedUrl='',requestedCourseId='',requestedClassId='',requestedCpi='',frames=[],responseStatus=200}={}){
  const u=new URL(url);
- return JSON.parse(JSON.stringify(await vm.runInNewContext(`(async()=>{${source}})()`,{task,expectedUrl,requestedCourseId,requestedClassId,requestedCpi,URL:URLConstructor,location:{protocol:u.protocol,hostname:u.hostname,pathname:u.pathname,href:u.href},performance:{getEntriesByType:()=>[{responseStatus}]},document:{createElement:()=>{let target;return {set href(value){target=new URL(value,u.href);},get href(){return target.href;},get protocol(){return target.protocol;},get hostname(){return target.hostname;},get username(){return target.username;},get password(){return target.password;},get port(){return target.port;}};},readyState,body:{innerText:text},querySelectorAll:()=>nodes,querySelector:s=>s==='#enc'?{value:pageEnc}:s==='#workEnc'?{value:workEnc}:null}})));
+ return JSON.parse(JSON.stringify(await vm.runInNewContext(`(async()=>{${source}})()`,{task,expectedUrl,requestedCourseId,requestedClassId,requestedCpi,URL:URLConstructor,location:{protocol:u.protocol,hostname:u.hostname,pathname:u.pathname,href:u.href},performance:{getEntriesByType:()=>[{responseStatus}]},document:{createElement:()=>{let target;return {set href(value){target=new URL(value,u.href);},get href(){return target.href;},get protocol(){return target.protocol;},get hostname(){return target.hostname;},get pathname(){return target.pathname;},get username(){return target.username;},get password(){return target.password;},get port(){return target.port;}};},readyState,body:{innerText:text},querySelectorAll:s=>s==='iframe'?frames:nodes,querySelector:s=>s==='#enc'?{value:pageEnc}:s==='#workEnc'?{value:workEnc}:null}})));
 }
 test('course verification validates fields, deduplicates by course and class, and exposes no identity',async()=>{
  const row=(id)=>({cpi:3,content:{id,course:{data:[{id:1,name:'课名',secret:'SECRET'}]}}});
@@ -115,4 +115,37 @@ test('refreshing the same course still waits for its previous exam document to l
  const old='https://mooc1.chaoxing.com/exam-ans/mooc2/exam/exam-list?courseid=10&clazzid=20&cpi=30';
  const r=await run({task:'meta',url:old,expectedUrl:old,requestedCourseId:'10',requestedClassId:'20',requestedCpi:'30'});
  assert.equal(r.code,'pending');
+});
+
+test('progress reads only explicit completed task-point totals and validates counts',async()=>{
+ const url='https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/stu';
+ assert.deepEqual((await run({task:'progress',url,text:'已完成任务点: 3 / 12'})).progress,{completed:3,total:12});
+ assert.deepEqual((await run({task:'progress',url,text:'已完成任务点: 0 / 0'})).progress,{completed:0,total:0});
+ for(const text of ['完成章节 3/12','作业 3/12','暂无任务点']) assert.equal((await run({task:'progress',url,text})).code,'pending');
+ assert.equal((await run({task:'progress',url,text:'已完成任务点: 13 / 12'})).ok,false);
+ assert.equal((await run({task:'progress',url,text:'已完成任务点: 3 / 12 已完成任务点: 4 / 12'})).ok,false);
+});
+test('progress follows only a published HTTPS course iframe, without reading cross-origin documents',async()=>{
+ const url='https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/stu';
+ const frame=src=>({getAttribute:()=>src,get contentDocument(){throw Error('cross origin')}});
+ const target='https://mooc1.chaoxing.com/mooc2-ans/mycourse/studentcourse?enc=opaque';
+ assert.equal((await run({task:'progress',url,frames:[frame(target)]})).chapterUrl,target);
+ for(const target of ['https://evil.org/mycourse/studentcourse','http://mooc1.chaoxing.com/mycourse/studentcourse','https://mooc1.chaoxing.com/work/detail']) {
+  assert.equal((await run({task:'progress',url,frames:[frame(target)]})).code,'pending');
+ }
+});
+
+test('same-origin iframe progress requires the actual iframe document to match its target',async()=>{
+ const url='https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/stu';
+ const target='https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/studentcourse';
+ const child={body:{innerText:'已完成任务点: 8 / 20'},querySelectorAll:()=>[]};
+ const frame={getAttribute:()=>target,contentWindow:{location:{href:target}},contentDocument:child};
+ assert.deepEqual((await run({task:'progress',url,frames:[frame]})).progress,{completed:8,total:20});
+ frame.contentWindow.location.href=target+'?previous=true';
+ assert.equal((await run({task:'progress',url,frames:[frame]})).code,'pending');
+});
+test('published chapter iframes cannot mix another course progress into the selected course',async()=>{
+ const url='https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/stu?courseid=10&clazzid=20&cpi=30';
+ const frame={getAttribute:()=> 'https://mooc1.chaoxing.com/mooc2-ans/mycourse/studentcourse?courseid=11&clazzid=20&cpi=30'};
+ assert.equal((await run({task:'progress',url,frames:[frame],requestedCourseId:'10',requestedClassId:'20',requestedCpi:'30'})).code,'pending');
 });

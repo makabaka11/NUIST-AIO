@@ -2,8 +2,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../campus_ui.dart';
 import '../widgets.dart';
+import '../services/site_registry.dart';
 
-const appVersionLabel = 'v0.3.5 · Build 14';
+const appVersionLabel = 'v0.5.0 · Build 15';
 
 class AboutActions {
   static Future<void> openLink(
@@ -19,8 +20,55 @@ class AboutActions {
     }
   }
 
+  static Future<void> repositories(BuildContext context) async {
+    final repository = await showDialog<Uri>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('项目仓库'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, AppReleaseSources.github),
+            child: const Text('GitHub'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, AppReleaseSources.gitee),
+            child: const Text('Gitee'),
+          ),
+        ],
+      ),
+    );
+    if (repository == null || !context.mounted) return;
+    await openLink(context, repository, '无法打开浏览器，请检查默认浏览器设置。');
+  }
+
   static void feedback(BuildContext context) =>
       showGroupQrDialog(context, '1135530515');
+  static void appreciation(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: const Text('赞赏码'),
+      content: SizedBox(
+        width: 280,
+        height:
+            (MediaQuery.sizeOf(dialog).height -
+                    MediaQuery.viewPaddingOf(dialog).vertical -
+                    240)
+                .clamp(72.0, 280.0),
+        child: Image.asset(
+          'assets/appreciation_code.png',
+          fit: BoxFit.contain,
+          semanticLabel: '开发者赞赏码',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialog),
+          child: const Text('关闭'),
+        ),
+      ],
+    ),
+  );
+
   static void introduction(BuildContext context) => showDialog<void>(
     context: context,
     builder: (dialog) => AlertDialog(

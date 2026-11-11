@@ -9,6 +9,7 @@ import 'package:flutter_liquid_glass_nav_bar/flutter_liquid_glass_nav_bar.dart';
 
 import 'app_state.dart';
 import 'about/about_page.dart';
+import 'updates/update_ui.dart';
 import 'library/library_page.dart';
 import 'chaoxing/chaoxing_page.dart';
 import 'calendar/calendar_page.dart';
@@ -790,6 +791,17 @@ class _ProfilePage extends StatelessWidget {
         const SizedBox(height: 24),
         PreferenceGroup(
           children: [
+            PreferenceRow(
+              icon: Icons.system_update_outlined,
+              title: '更新设置',
+              subtitle: '版本检查、下载源与更新提醒',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => UpdateSettingsPage(updates: state.updates),
+                ),
+              ),
+            ),
             PreferenceRow(
               icon: Icons.info_outline,
               title: '关于应用',

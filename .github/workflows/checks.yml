@@ -1,0 +1,39 @@
+name: PR checks
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Analyze and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test
+      - name: JavaScript adapters
+        run: node --test tools/test_*adapter.mjs tools/test_portal_probe.mjs
+      - name: Android TLS policy
+        run: python3 tools/test_network_security_policy.py
+      - name: Release tooling
+        run: python3 -m unittest discover -s tools/ci -p 'test_*.py'

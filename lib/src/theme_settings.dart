@@ -99,8 +99,6 @@ class ThemeControls extends StatelessWidget {
                     onChangeEnd: (value) =>
                         uiAction(context, () => state.setFontScale(value)),
                   ),
-                  const Text('75%–150%，每档 5%。在系统字号基础上调整，100% 为默认大小。'),
-                  const SizedBox(height: 12),
                   Text(
                     '校园日常，从容阅读。',
                     style: Theme.of(context).textTheme.bodyLarge,

@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_miuix/miuix.dart';
 
 import 'app_state.dart';
+import 'updates/update_ui.dart';
 import 'miuix_widgets.dart';
 import 'onboarding.dart';
 import 'shell.dart';
@@ -60,7 +61,10 @@ class CampusApp extends StatelessWidget {
                   primary: c.primary,
                   onPrimary: c.onPrimary,
                   primaryContainer: c.primaryContainer,
-                  onPrimaryContainer: c.onPrimaryContainer,
+                  onPrimaryContainer: _readableContainerText(
+                    c.onPrimaryContainer,
+                    c.primaryContainer,
+                  ),
                   tertiary: c.primary,
                   onTertiary: c.onPrimary,
                   surfaceTint: c.primary,
@@ -71,7 +75,10 @@ class CampusApp extends StatelessWidget {
                   // onSecondaryVariant，避免在浅灰容器上出现低对比度文字。
                   onSecondaryContainer: c.onSecondaryVariant,
                   tertiaryContainer: c.tertiaryContainer,
-                  onTertiaryContainer: c.onTertiaryContainer,
+                  onTertiaryContainer: _readableContainerText(
+                    c.onTertiaryContainer,
+                    c.tertiaryContainer,
+                  ),
                   surface: c.surface,
                   onSurface: c.onSurface,
                   onSurfaceVariant: c.onSurfaceVariantSummary,
@@ -134,6 +141,7 @@ class CampusApp extends StatelessWidget {
 
         return MaterialApp(
           title: '信大AIO',
+          navigatorObservers: [updateRouteObserver],
           debugShowCheckedModeBanner: false,
           locale: const Locale('zh', 'CN'),
           supportedLocales: const [Locale('zh', 'CN')],
@@ -163,9 +171,12 @@ class CampusApp extends StatelessWidget {
               ),
             );
           },
-          home: state.onboarded
-              ? CampusShell(state: state)
-              : OnboardingPage(state: state),
+          home: UpdateStartupGate(
+            updates: state.updates,
+            child: state.onboarded
+                ? CampusShell(state: state)
+                : OnboardingPage(state: state),
+          ),
         );
       },
     ),
@@ -206,4 +217,17 @@ class _CampusTextScaler extends TextScaler {
       other.factor == factor;
   @override
   int get hashCode => Object.hash(system, factor);
+}
+
+// MIUIX 的部分容器前景色用作强调装饰，映射给正文时需要足够的对比度。
+Color _readableContainerText(Color foreground, Color background) {
+  final textLuminance = Color.alphaBlend(
+    foreground,
+    background,
+  ).computeLuminance();
+  final backgroundLuminance = background.computeLuminance();
+  final text = textLuminance + .05;
+  final fill = backgroundLuminance + .05;
+  if ((text > fill ? text / fill : fill / text) >= 4.5) return foreground;
+  return fill / .05 >= 1.05 / fill ? Colors.black : Colors.white;
 }

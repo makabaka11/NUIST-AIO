@@ -204,6 +204,7 @@ void main() {
     (tester) async {
       final state = AppState();
       await state.load();
+      state.networkMode = CampusNetworkMode.direct;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(

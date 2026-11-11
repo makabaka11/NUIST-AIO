@@ -335,6 +335,7 @@ class _ChaoxingTaskList extends StatefulWidget {
 class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
   AppState get state => widget.state;
   String? filter;
+  int subpage = 0;
   @override
   void initState() {
     super.initState();
@@ -387,6 +388,81 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
     }
   }
 
+  Widget courseCard(BuildContext context, ChaoxingCourse course) {
+    final colors = Theme.of(context).colorScheme;
+    final complete =
+        course.hasProgress &&
+        course.total! > 0 &&
+        course.completed == course.total;
+    final accent = course.failed
+        ? colors.error
+        : complete
+        ? colors.tertiary
+        : colors.primary;
+    return Card(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Icon(Icons.menu_book_outlined, color: accent),
+        title: Text(
+          course.title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (course.alias.isNotEmpty) Text(course.alias),
+              Text(
+                course.hasProgress
+                    ? course.total == 0
+                          ? '无任务点'
+                          : '已完成任务点 ${course.completed} / ${course.total}'
+                    : course.failed
+                    ? '任务点进度未读取'
+                    : state.chaoxing.busy
+                    ? '等待扫描任务点…'
+                    : '任务点尚未扫描',
+                style: TextStyle(color: accent, fontWeight: FontWeight.w500),
+              ),
+              if (course.hasProgress && course.total! > 0) ...[
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: course.completed! / course.total!,
+                  color: accent,
+                  borderRadius: BorderRadius.circular(8),
+                  minHeight: 6,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${(course.completed! / course.total! * 100).round()}%',
+                  style: TextStyle(color: accent),
+                ),
+              ],
+              if (course.failed && course.hasProgress)
+                Text('本次未更新，保留上次进度', style: TextStyle(color: colors.error)),
+              if (course.updatedAt != null)
+                Text(
+                  '进度更新：${course.updatedAt!.toLocal().toString().substring(0, 16)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ],
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          final ok = await launchChaoxingItem(course.url);
+          if (!ok && context.mounted) {
+            showCampusSnackBar(
+              context,
+              const SnackBar(content: Text('课程页面未能打开，请稍后重试。')),
+            );
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: state.chaoxing,
@@ -402,7 +478,7 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
             children: [
               Expanded(
                 child: Text(
-                  '作业与考试',
+                  '学习通',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
@@ -412,12 +488,30 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
                 icon: const Icon(Icons.manage_accounts_outlined),
               ),
               IconButton(
-                tooltip: '刷新作业与考试',
+                tooltip: '刷新课程、作业与考试',
                 onPressed: r.verified && !r.busy ? state.refreshChaoxing : null,
                 icon: const Icon(Icons.refresh),
               ),
             ],
           ),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(
+                value: 0,
+                label: Text('课程'),
+                icon: Icon(Icons.menu_book_outlined),
+              ),
+              ButtonSegment(
+                value: 1,
+                label: Text('作业与考试'),
+                icon: Icon(Icons.assignment_outlined),
+              ),
+            ],
+            selected: {subpage},
+            onSelectionChanged: (value) =>
+                setState(() => subpage = value.first),
+          ),
+          const SizedBox(height: 12),
           if (!r.verified) Card(child: ChaoxingAccountTile(state: state)),
           if (r.scanTerm != null)
             Padding(
@@ -441,30 +535,26 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
                   ?.copyWith(color: colors.onSurfaceVariant),
             ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ChoiceChip(
-                label: Text('全部 ${r.items.length}'),
-                selected: filter == null,
-                onSelected: (_) => setState(() => filter = null),
-              ),
-              for (final entry in groups.entries)
+          if (subpage == 1)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
                 ChoiceChip(
-                  label: Text(
-                    '${entry.value} ${r.items.where((item) => item.group == entry.key).length}',
-                  ),
-                  selected: filter == entry.key,
-                  selectedColor: groupColor(
-                    context,
-                    entry.key,
-                  ).withValues(alpha: .18),
-                  labelStyle: TextStyle(color: groupColor(context, entry.key)),
-                  onSelected: (_) => setState(() => filter = entry.key),
+                  label: Text('全部 ${r.items.length}'),
+                  selected: filter == null,
+                  onSelected: (_) => setState(() => filter = null),
                 ),
-            ],
-          ),
+                for (final entry in groups.entries)
+                  ChoiceChip(
+                    label: Text(
+                      '${entry.value} ${r.items.where((item) => item.group == entry.key).length}',
+                    ),
+                    selected: filter == entry.key,
+                    onSelected: (_) => setState(() => filter = entry.key),
+                  ),
+              ],
+            ),
           if (r.busy) ...[
             const SizedBox(height: 12),
             const LinearProgressIndicator(),
@@ -501,7 +591,7 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
                 ],
               ),
             ),
-          if (r.verified && visible.isEmpty && !r.busy)
+          if (subpage == 1 && r.verified && visible.isEmpty && !r.busy)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
@@ -512,80 +602,91 @@ class _ChaoxingPanelState extends State<_ChaoxingTaskList> {
                     : '没有${groups[filter]}的项目。',
               ),
             ),
-          for (final item in visible)
-            Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                leading: CircleAvatar(
-                  backgroundColor:
-                      (item.kind == 'work' ? colors.primary : colors.tertiary)
-                          .withValues(alpha: .12),
-                  child: Icon(
-                    item.kind == 'work'
-                        ? Icons.assignment_outlined
-                        : Icons.quiz_outlined,
-                    color: item.kind == 'work'
-                        ? colors.primary
-                        : colors.tertiary,
-                  ),
-                ),
-                title: Text(
-                  item.title,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          StatusTag(
-                            item.kind == 'work' ? '作业' : '考试',
-                            color: item.kind == 'work'
-                                ? colors.primary
-                                : colors.tertiary,
-                          ),
-                          StatusTag(
-                            item.status,
-                            color: groupColor(context, item.group),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 7),
-                      Text(
-                        item.course,
-                        style: TextStyle(color: colors.onSurfaceVariant),
-                      ),
-                      if (item.time.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            item.time,
-                            style: TextStyle(
-                              color: item.group == 'expired'
-                                  ? colors.error
-                                  : colors.tertiary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                onTap: () => open(context, item),
-                trailing: IconButton(
-                  tooltip: '在浏览器打开',
-                  onPressed: () => open(context, item, browserOnly: true),
-                  icon: const Icon(Icons.open_in_browser_outlined),
+          if (subpage == 0) ...[
+            if (r.verified && r.courses.isEmpty && !r.busy)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  r.scanTerm == null ? '点击刷新，读取本学期课程和任务点进度。' : '本学期没有匹配的学习通课程。',
                 ),
               ),
-            ),
+            for (final course in r.courses) courseCard(context, course),
+          ],
+          if (subpage == 1)
+            for (final item in visible)
+              Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor:
+                        (item.kind == 'work' ? colors.primary : colors.tertiary)
+                            .withValues(alpha: .12),
+                    child: Icon(
+                      item.kind == 'work'
+                          ? Icons.assignment_outlined
+                          : Icons.quiz_outlined,
+                      color: item.kind == 'work'
+                          ? colors.primary
+                          : colors.tertiary,
+                    ),
+                  ),
+                  title: Text(
+                    item.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            StatusTag(
+                              item.kind == 'work' ? '作业' : '考试',
+                              color: item.kind == 'work'
+                                  ? colors.primary
+                                  : colors.tertiary,
+                            ),
+                            StatusTag(
+                              item.status,
+                              color: groupColor(context, item.group),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          item.course,
+                          style: TextStyle(color: colors.onSurfaceVariant),
+                        ),
+                        if (item.time.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              item.time,
+                              style: TextStyle(
+                                color: item.group == 'expired'
+                                    ? colors.error
+                                    : colors.tertiary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  onTap: () => open(context, item),
+                  trailing: IconButton(
+                    tooltip: '在浏览器打开',
+                    onPressed: () => open(context, item, browserOnly: true),
+                    icon: const Icon(Icons.open_in_browser_outlined),
+                  ),
+                ),
+              ),
         ],
       );
     },

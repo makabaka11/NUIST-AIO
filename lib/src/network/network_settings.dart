@@ -1,6 +1,7 @@
 import '../campus_ui.dart';
 
 import '../app_state.dart';
+import '../services/site_registry.dart';
 import '../theme_settings.dart' show uiAction;
 import '../widgets.dart';
 import 'campus_network.dart';
@@ -51,7 +52,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         children: [
           const SectionTitle('校内资源访问路径'),
           const Text(
-            '当前支持公告板；功能页的内网外部入口可单独选择 VPN 打开。学校网关会话独立验证，系统浏览器可能需要再次登录。',
+            '自动模式会在启动和返回前台时按站点检测链路，功能条目和右侧按钮使用相同结果。系统浏览器会话独立，使用 VPN 时可能需要再次登录。',
           ),
           const SizedBox(height: 16),
           for (final mode in CampusNetworkMode.values)
@@ -69,7 +70,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   CampusNetworkMode.vpn => '学校 WebVPN',
                 }),
                 subtitle: Text(switch (mode) {
-                  CampusNetworkMode.automatic => '先验证直连，失败后尝试学校 WebVPN',
+                  CampusNetworkMode.automatic => '检测各站点直连；不可达时使用已验证的学校 VPN 入口',
                   CampusNetworkMode.direct => '只使用学校原始地址，不自动切换',
                   CampusNetworkMode.vpn => '只使用官方授权资源的 WebVPN 地址',
                 }),
@@ -85,6 +86,38 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               ),
             ),
           const SizedBox(height: 20),
+          const SectionTitle('各站点打开链路'),
+          Card(
+            child: Column(
+              children: [
+                for (final link in SchoolBrowserLinks.all.where((l) => l.vpn))
+                  ListTile(
+                    title: Text(link.name),
+                    subtitle: Text(_linkStatus(link)),
+                  ),
+              ],
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed:
+                busy ||
+                    widget.state.networkLinks.checking ||
+                    widget.state.networkMode != CampusNetworkMode.automatic
+                ? null
+                : () async {
+                    setState(() => busy = true);
+                    try {
+                      await widget.state.detectNetworkLinks(force: true);
+                    } finally {
+                      if (mounted) setState(() => busy = false);
+                    }
+                  },
+            icon: const Icon(Icons.refresh),
+            label: Text(
+              widget.state.networkLinks.checking ? '正在检测链路…' : '重新检测自动链路',
+            ),
+          ),
+          const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: busy
                 ? null
@@ -95,7 +128,12 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         builder: (_) => const VpnLoginPage(),
                       ),
                     );
-                    if (mounted) test(mode: CampusNetworkMode.vpn);
+                    if (mounted) {
+                      await widget.state.bulletins.vpn.close();
+                      widget.state.networkLinks.reset();
+                      await widget.state.detectNetworkLinks();
+                      if (mounted) test(mode: CampusNetworkMode.vpn);
+                    }
                   },
             icon: const Icon(Icons.vpn_key_outlined),
             label: const Text('连接 / 重新验证学校 VPN'),
@@ -122,4 +160,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       ),
     ),
   );
+  String _linkStatus(SchoolBrowserLink link) {
+    if (widget.state.networkMode == CampusNetworkMode.direct) {
+      return '校园直连（手动固定）';
+    }
+    if (widget.state.networkMode == CampusNetworkMode.vpn) {
+      return '学校 WebVPN（手动固定）';
+    }
+    final result = widget.state.networkLinks.results[link.id];
+    if (result?.path == CampusPath.direct) return '自动选择：校园直连';
+    if (result?.path == CampusPath.vpn) return '自动选择：学校 WebVPN（授权目录已验证）';
+    if (widget.state.networkLinks.checking) return '正在检测可用链路…';
+    return result?.error ?? '尚未检测，首次打开时会检测';
+  }
 }

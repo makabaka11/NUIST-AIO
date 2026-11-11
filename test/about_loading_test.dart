@@ -52,6 +52,11 @@ void main() {
           350,
           scrollable: find.byType(md.Scrollable).first,
         );
+        await md.Scrollable.ensureVisible(
+          tester.element(find.text('关于应用')),
+          alignment: .5,
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('关于应用'));
         await tester.pumpAndSettle();
         expect(find.byType(AboutPage), findsOneWidget);
@@ -72,7 +77,37 @@ void main() {
           expect(find.byType(MiuixSmallTopAppBar), findsOneWidget);
         }
         expect(find.text('信大 AIO'), findsOneWidget);
-        expect(find.text('v0.3.5 · Build 14'), findsOneWidget);
+        expect(find.text('v0.5.0 · Build 15'), findsOneWidget);
+        final launches = <String>[];
+        const launcher = MethodChannel('plugins.flutter.io/url_launcher');
+        final messenger = tester.binding.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(launcher, (call) async {
+          expect(call.method, 'launch');
+          expect(call.arguments['useWebView'], isFalse);
+          launches.add(call.arguments['url'] as String);
+          return true;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(launcher, null));
+        final repositories = find.text('项目仓库');
+        await tester.scrollUntilVisible(
+          repositories,
+          200,
+          scrollable: find.byType(md.Scrollable).first,
+        );
+        expect(
+          tester.getTopLeft(repositories).dy,
+          lessThan(tester.getTopLeft(find.text('交流与反馈')).dy),
+        );
+        for (final host in ['GitHub', 'Gitee']) {
+          await tester.tap(repositories);
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(host));
+          await tester.pumpAndSettle();
+        }
+        expect(launches, [
+          'https://github.com/makabaka11/NUIST-AIO',
+          'https://gitee.com/ded_retr0/NUIST-AIO',
+        ]);
         await tester.scrollUntilVisible(
           find.text('交流与反馈'),
           200,
@@ -87,6 +122,32 @@ void main() {
         }
         await tester.tap(find.text('关闭'));
         await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('赞赏码'),
+          200,
+          scrollable: find.byType(md.Scrollable).first,
+        );
+        expect(
+          tester.getTopLeft(find.text('赞赏码')).dy,
+          greaterThan(tester.getTopLeft(find.text('交流与反馈')).dy),
+        );
+        await tester.tap(find.text('赞赏码'));
+        await tester.pumpAndSettle();
+        final appreciationImage = find.byWidgetPredicate(
+          (widget) =>
+              widget is md.Image &&
+              widget.image is md.AssetImage &&
+              (widget.image as md.AssetImage).assetName ==
+                  'assets/appreciation_code.png',
+        );
+        expect(appreciationImage, findsOneWidget);
+        expect(
+          tester.widget<md.Image>(appreciationImage).fit,
+          md.BoxFit.contain,
+        );
+        await tester.tap(find.text('关闭'));
+        await tester.pumpAndSettle();
+        expect(appreciationImage, findsNothing);
         await tester.scrollUntilVisible(
           find.text('联系邮箱'),
           250,

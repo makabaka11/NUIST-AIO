@@ -100,6 +100,12 @@ void main() {
               'courses': [course],
             };
           }
+          if (task == 'progress') {
+            return {
+              'ok': true,
+              'progress': {'completed': 3, 'total': 10},
+            };
+          }
           if (task == 'meta') {
             return {'ok': true, 'stuenc': 'a' * 32, 'workEnc': 'b' * 32};
           }
@@ -161,6 +167,123 @@ void main() {
       r.dispose();
     },
   );
+  test('course progress preserves valid cache on failure and clears on account change', () async {
+    var fail = false;
+    final r = ChaoxingRepository(
+      courseGap: Duration.zero,
+      currentTerm: () async =>
+          ChaoxingTermScope(ScheduleParser.parse(fixture([row(name: '课程')]))),
+      documentReader: (url, task) async {
+        if (task == 'courses') {
+          return {
+            'ok': true,
+            'courses': [course],
+          };
+        }
+        if (task == 'meta') {
+          return {'ok': true, 'stuenc': 'a' * 32, 'workEnc': 'b' * 32};
+        }
+        if (task == 'progress') {
+          return fail
+              ? {'ok': false, 'code': 'parse'}
+              : {
+                  'ok': true,
+                  'progress': {'completed': 4, 'total': 12},
+                };
+        }
+        return {'ok': true, 'items': []};
+      },
+    );
+    await r.verify();
+    await r.refresh();
+    expect(r.courses.single.completed, 4);
+    expect(r.courses.single.total, 12);
+    expect(r.courses.single.failed, false);
+    fail = true;
+    await r.refresh();
+    expect(r.courses.single.completed, 4);
+    expect(r.courses.single.failed, true);
+    expect(r.notice, contains('任务点未读取'));
+    await r.close();
+    expect(r.courses, isEmpty);
+    r.dispose();
+  });
+  testWidgets(
+    'course tab displays progress and switches to existing task filters',
+    (tester) async {
+      final state = AppState();
+      addTearDown(state.dispose);
+      state.chaoxing.verified = true;
+      state.chaoxing.updatedAt = DateTime.now();
+      state.chaoxing.courses = [
+        ChaoxingCourse(
+          key: '1:2',
+          title: '测试课程',
+          alias: '本学期',
+          url: Uri.https('mooc1.chaoxing.com', '/visit/stucoursemiddle'),
+          completed: 3,
+          total: 12,
+        ),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: ChaoxingPanel(state: state)),
+          ),
+        ),
+      );
+      expect(find.text('测试课程'), findsOneWidget);
+      expect(find.text('已完成任务点 3 / 12'), findsOneWidget);
+      expect(find.text('25%'), findsOneWidget);
+      expect(find.text('未完成 0'), findsNothing);
+      await tester.tap(find.text('作业与考试'));
+      await tester.pumpAndSettle();
+      expect(find.text('未完成 0'), findsOneWidget);
+      expect(find.text('测试课程'), findsNothing);
+      await tester.tap(find.text('课程').first);
+      await tester.pumpAndSettle();
+      expect(find.text('测试课程'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  test('late progress cannot restore courses after account removal', () async {
+    final started = Completer<void>();
+    final pending = Completer<Map<String, dynamic>>();
+    final r = ChaoxingRepository(
+      courseGap: Duration.zero,
+      currentTerm: () async =>
+          ChaoxingTermScope(ScheduleParser.parse(fixture([row(name: '课程')]))),
+      documentReader: (url, task) async {
+        if (task == 'courses') {
+          return {
+            'ok': true,
+            'courses': [course],
+          };
+        }
+        if (task == 'meta') {
+          return {'ok': true, 'stuenc': 'a' * 32, 'workEnc': 'b' * 32};
+        }
+        if (task == 'progress') {
+          started.complete();
+          return pending.future;
+        }
+        return {'ok': true, 'items': []};
+      },
+    );
+    await r.verify();
+    final scanning = r.refresh();
+    await started.future;
+    await r.close();
+    pending.complete({
+      'ok': true,
+      'progress': {'completed': 9, 'total': 10},
+    });
+    await scanning;
+    expect(r.courses, isEmpty);
+    expect(r.items, isEmpty);
+    expect(r.updatedAt, isNull);
+    r.dispose();
+  });
   test('legacy login destination upgrades without broadening trust', () {
     final raw = Uri.parse('http://i.mooc.chaoxing.com/?refer=opaque#section');
     final secure = chaoxingHttpsUpgrade(raw)!;
@@ -231,6 +354,12 @@ void main() {
             ],
           };
         }
+        if (task == 'progress') {
+          return {
+            'ok': true,
+            'progress': {'completed': 3, 'total': 10},
+          };
+        }
         if (task == 'meta') {
           return {'ok': true, 'stuenc': 'a' * 32, 'workEnc': 'b' * 32};
         }
@@ -260,6 +389,12 @@ void main() {
           return {
             'ok': true,
             'courses': [course],
+          };
+        }
+        if (task == 'progress') {
+          return {
+            'ok': true,
+            'progress': {'completed': 3, 'total': 10},
           };
         }
         if (task == 'meta') {
@@ -439,6 +574,8 @@ void main() {
           ),
         ),
       );
+      await tester.tap(find.text('作业与考试'));
+      await tester.pumpAndSettle();
       expect(find.text('未完成 1'), findsOneWidget);
       expect(find.text('待批改 1'), findsOneWidget);
       expect(find.text('已完成 1'), findsOneWidget);
@@ -448,6 +585,12 @@ void main() {
       expect(find.text('待批改条目'), findsOneWidget);
       expect(find.text('未完成条目'), findsNothing);
       await tester.tap(find.text('已过期 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('已过期条目'), findsOneWidget);
+      expect(find.text('待批改条目'), findsNothing);
+      await tester.tap(find.text('课程').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('作业与考试'));
       await tester.pumpAndSettle();
       expect(find.text('已过期条目'), findsOneWidget);
       expect(find.text('待批改条目'), findsNothing);
@@ -502,6 +645,12 @@ void main() {
           return {
             'ok': true,
             'courses': [course],
+          };
+        }
+        if (task == 'progress') {
+          return {
+            'ok': true,
+            'progress': {'completed': 3, 'total': 10},
           };
         }
         if (task == 'meta') {
