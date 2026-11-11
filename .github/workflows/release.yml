@@ -98,7 +98,8 @@ jobs:
         run: |
           flutter build macos --release --build-name="$RELEASE_VERSION" --build-number="$RELEASE_BUILD"
           APP="build/macos/Build/Products/Release/nuist_aio.app"
-          lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/nuist_aio"
+          lipo "$APP/Contents/MacOS/nuist_aio" -verify_arch arm64
+          lipo "$APP/Contents/MacOS/nuist_aio" -verify_arch x86_64
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/nuistaio-${RELEASE_TAG}-macos-universal.zip"
       - name: Build Windows portable archive
