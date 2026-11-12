@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
       - id: version
-        name: Validate tag and release notes
+        name: Derive version from tag and validate release notes
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 tools/ci/release_metadata.py

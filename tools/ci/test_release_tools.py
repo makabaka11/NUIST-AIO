@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,21 +19,43 @@ class ReleaseToolsTest(unittest.TestCase):
         printer.start()
         self.addCleanup(printer.stop)
 
-    def test_tag_version_and_notes_must_match(self):
-        self.assertEqual(metadata('v0.5.0', 'version: 0.5.0+15\n', '# v0.5.0\n\nChanges\n' + PLATFORM_NOTES)['build'], '15')
-        for tag, version, notes in [
-            ('v0.5.0-beta', '0.5.0+15', '# v0.5.0-beta\nChanges'),
-            ('v0.5.0', '0.4.0+15', '# v0.5.0\nChanges'),
-            ('v0.5.0', '0.5.0+15', '# v0.4.0\nChanges'),
-            ('v0.5.0', '0.5.0', '# v0.5.0\nChanges'),
-            ('v0.5.0', '0.5.0+2147483647', '# v0.5.0\nChanges'),
+    def test_release_version_and_build_come_from_tag(self):
+        self.assertEqual(metadata('v0.5.1', '# v0.5.1\n\nChanges\n'),
+                         {'version': '0.5.1', 'build': '501', 'tag': 'v0.5.1'})
+        tags = ['v0.5.0', 'v0.5.1', 'v0.5.99', 'v0.6.0', 'v0.99.99', 'v1.0.0']
+        builds = [int(metadata(tag, f'# {tag}\nChanges\n')['build']) for tag in tags]
+        self.assertEqual(builds, sorted(set(builds)))
+        self.assertGreater(builds[1], 15)  # Published v0.5.0 used versionCode 15.
+
+    def test_invalid_tags_build_ranges_and_mismatched_notes_fail(self):
+        for tag, notes in [
+            ('v0.5.0-beta', '# v0.5.0-beta\nChanges'),
+            ('v00.5.0', '# v00.5.0\nChanges'),
+            ('0.5.0', '# 0.5.0\nChanges'),
+            ('v0.100.0', '# v0.100.0\nChanges'),
+            ('v0.5.100', '# v0.5.100\nChanges'),
+            ('v0.0.0', '# v0.0.0\nChanges'),
+            ('v6.55.36', '# v6.55.36\nChanges'),
+            ('v0.5.1', '# v0.5.0\nChanges'),
+            ('v0.5.1', '# v0.5.1\n'),
         ]:
-            with self.assertRaises(ValueError):
-                metadata(tag, 'version: ' + version, notes)
+            with self.subTest(tag=tag, notes=notes), self.assertRaises(ValueError):
+                metadata(tag, notes)
+        self.assertEqual(metadata('v6.55.35', '# v6.55.35\nChanges')['build'], '65535')
+
+    def test_ci_entrypoint_does_not_require_pubspec(self):
+        script = Path(__file__).with_name('release_metadata.py').resolve()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'RELEASE_NOTE.md').write_text('# v0.5.1\n\n更新内容。\n', encoding='utf-8')
+            output = root / 'outputs'
+            subprocess.run([sys.executable, str(script)], cwd=root, check=True,
+                           env={**os.environ, 'RELEASE_TAG': 'v0.5.1', 'GITHUB_OUTPUT': str(output)})
+            self.assertEqual(output.read_text().splitlines(), ['version=0.5.1', 'build=501', 'tag=v0.5.1'])
 
     def test_platform_notes_are_appended_without_requiring_source_section(self):
         notes = '# v0.5.0\n\n## 修复\n\n- 修复构建。\n'
-        self.assertEqual(metadata('v0.5.0', 'version: 0.5.0+15\n', notes)['tag'], 'v0.5.0')
+        self.assertEqual(metadata('v0.5.0', notes)['tag'], 'v0.5.0')
         self.assertEqual(compose(notes), notes.rstrip() + '\n\n' + PLATFORM_NOTES + '\n')
 
     def test_existing_platform_sections_are_replaced_and_other_sections_preserved(self):
