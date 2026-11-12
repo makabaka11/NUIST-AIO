@@ -158,33 +158,6 @@ jobs:
   mirror:
     name: Sync releases to Gitee
     needs: publish
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - name: Check Gitee token configuration
-        id: gitee
-        shell: bash
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          if [[ -n "$GITEE_TOKEN" ]]; then
-            # Upstream debug output can include the first nine token characters.
-            echo "::add-mask::${GITEE_TOKEN:0:9}"
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::Gitee sync skipped: GITEE_TOKEN is not configured."
-          fi
-      - name: Sync GitHub releases and attachments to Gitee
-        if: steps.gitee.outputs.enabled == 'true'
-        # Marketplace sync-release-to-gitee; v1.0 has a broken script entry point.
-        uses: H-TWINKLE/sync-action@0d8e95d78481848a0f3f95a737aef45437102269
-        timeout-minutes: 12
-        with:
-          gitee_owner: ded_retr0
-          gitee_repo: NUIST-AIO
-          gitee_token: ${{ secrets.GITEE_TOKEN }}
-          github_owner: ${{ github.repository_owner }}
-          github_repo: ${{ github.event.repository.name }}
-          gitee_upload_retry_times: '3'
-          # Upstream uses string truthiness, so even 'false' enables debug logging.
-          debug: ''
+    uses: ./.github/workflows/gitee-sync.yml
+    secrets:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}

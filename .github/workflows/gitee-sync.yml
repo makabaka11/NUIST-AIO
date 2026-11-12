@@ -1,0 +1,53 @@
+name: Sync Gitee releases
+
+on:
+  workflow_call:
+    secrets:
+      GITEE_TOKEN:
+        required: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Manual repair and release-triggered sync must not upload the same files together.
+concurrency:
+  group: gitee-release-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync releases and attachments
+    runs-on: ubuntu-24.04
+    # The action processes all releases, including older missing attachments.
+    # Observed Gitee uploads are only 20–35 kB/s; the current backlog is ~229 MB.
+    # Keep ten minutes outside the action for setup and cleanup.
+    timeout-minutes: 340
+    steps:
+      - name: Check Gitee token configuration
+        id: gitee
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [[ -n "$GITEE_TOKEN" ]]; then
+            # Upstream debug output can include the first nine token characters.
+            echo "::add-mask::${GITEE_TOKEN:0:9}"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Gitee sync skipped: GITEE_TOKEN is not configured."
+          fi
+      - name: Sync GitHub releases and attachments to Gitee
+        if: steps.gitee.outputs.enabled == 'true'
+        # Marketplace sync-release-to-gitee; v1.0 has a broken script entry point.
+        uses: H-TWINKLE/sync-action@0d8e95d78481848a0f3f95a737aef45437102269
+        timeout-minutes: 330
+        with:
+          gitee_owner: ded_retr0
+          gitee_repo: NUIST-AIO
+          gitee_token: ${{ secrets.GITEE_TOKEN }}
+          github_owner: ${{ github.repository_owner }}
+          github_repo: ${{ github.event.repository.name }}
+          gitee_upload_retry_times: '3'
+          # Upstream uses string truthiness, so even 'false' enables debug logging.
+          debug: ''
