@@ -4,6 +4,15 @@ import 'package:flutter/foundation.dart';
 
 import '../services/site_registry.dart';
 
+/// Public GitHub release files use the built-in mirror without a switch.
+Uri githubUpdateMirror(Uri url) =>
+    url.scheme == 'https' &&
+        url.userInfo.isEmpty &&
+        (!url.hasPort || url.port == 443) &&
+        url.host == 'github.com'
+    ? Uri.parse('https://gh-proxy.org/$url')
+    : url;
+
 enum UpdateSource {
   github('GitHub'),
   gitee('Gitee');
@@ -117,7 +126,9 @@ class AppRelease {
   final Uri page;
   final List<ReleaseAsset> assets;
   String get key => '${source.name}:$tag';
-  Uri? packageFor(UpdateRuntime runtime) {
+  Uri? packageFor(UpdateRuntime runtime) => assetFor(runtime)?.url;
+
+  ReleaseAsset? assetFor(UpdateRuntime runtime) {
     int score(ReleaseAsset asset) {
       final n = asset.name.toLowerCase();
       final ext = switch (runtime.platform) {
@@ -141,7 +152,7 @@ class AppRelease {
         return -1;
       }
       if (runtime.platform == TargetPlatform.windows &&
-          RegExp(r'macos|darwin').hasMatch(n)) {
+          RegExp(r'macos|darwin|(^|[-_.])mac([-_.]|$)').hasMatch(n)) {
         return -1;
       }
       String? arch;
@@ -156,16 +167,16 @@ class AppRelease {
       }
       if (arch != null && arch != runtime.arch) return -1;
       return (n.contains('universal')
-              ? 100
-              : arch == runtime.arch
               ? 80
+              : arch == runtime.arch
+              ? 100
               : 60) +
           (n.endsWith('.dmg') || n.endsWith('.exe') ? 5 : 0);
     }
 
     final compatible = assets.where((a) => score(a) >= 0).toList()
       ..sort((a, b) => score(b).compareTo(score(a)));
-    return compatible.isEmpty ? null : compatible.first.url;
+    return compatible.isEmpty ? null : compatible.first;
   }
 }
 

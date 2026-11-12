@@ -8,10 +8,66 @@ import java.io.File
 import android.content.Intent
 import android.net.Uri
 import android.webkit.CookieManager
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import androidx.core.content.FileProvider
 
 class MainActivity : FlutterActivity() {
+    private var pendingUpdate: File? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        savedInstanceState?.getString("pendingUpdate")?.let { path ->
+            val file = File(path).canonicalFile
+            if (file.parentFile == File(cacheDir, "updates").canonicalFile && file.isFile && file.extension == "apk") {
+                pendingUpdate = file
+            }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        pendingUpdate?.let { outState.putString("pendingUpdate", it.path) }
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun openInstaller(file: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.updates", file)
+        startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val file = pendingUpdate ?: return
+        pendingUpdate = null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+            runCatching { openInstaller(file) }
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nuistaio/updates")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "installApk") { result.notImplemented(); return@setMethodCallHandler }
+                runCatching {
+                    val file = File(call.arguments as? String ?: "").canonicalFile
+                    val root = File(cacheDir, "updates").canonicalFile
+                    require(file.parentFile == root && file.isFile && file.extension == "apk")
+                    val archive = packageManager.getPackageArchiveInfo(file.path, 0)
+                    require(archive?.packageName == packageName)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                        pendingUpdate = file
+                        startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                        "permissionRequired"
+                    } else {
+                        openInstaller(file)
+                        "requested"
+                    }
+                }.onSuccess { result.success(it) }
+                    .onFailure { pendingUpdate = null; result.error("update_install", "无法请求安装，请检查安装包和系统权限。", null) }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nuistaio/chaoxing")
             .setMethodCallHandler { call, result ->
                 if (call.method == "hasCourseCookies") {

@@ -20,6 +20,21 @@
 #shot-panel.paired .preview img{width:100%;max-width:270px}
 #zoom-extra[hidden]{display:none}
 @media(max-width:650px){#shot-panel.paired{padding:24px 12px 32px;gap:8px}}
+
+/* A direct download remains available while variants open on hover, focus or tap. */
+.download{overflow:visible;isolation:isolate}.download:after{clip-path:inset(0 round 36px)}
+.download-actions{position:relative;z-index:3;align-items:start}.download-picker{position:relative;max-width:100%}
+.download-control{display:flex;border-radius:16px;background:#fff;color:#1958b8;overflow:hidden}
+.download-control .btn{border-radius:0;color:#1958b8;gap:16px;box-shadow:none;transform:none}
+.download-control .btn:hover{background:#edf4ff}.download-toggle{border:0;border-left:1px solid #1958b826;background:#fff;color:#1958b8;padding:0 17px;font-size:23px}
+.download-toggle:hover{background:#edf4ff}.download-toggle[hidden],.download-options[hidden]{display:none}
+.download-options{position:absolute;bottom:100%;left:0;min-width:100%;width:max-content;max-width:min(340px,calc(100vw - 86px));padding-bottom:10px}
+.download-option-list{padding:7px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px #0003}
+.download-option-list a{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 12px;border-radius:11px;font-size:14px}
+.download-option-list a:hover,.download-option-list a:focus-visible{background:var(--soft);color:var(--blue)}
+.download-option-list small{white-space:nowrap;color:var(--muted);font-size:12px}.download-version{font-size:12px!important;margin:22px 0 0!important;color:#f1f6ff!important}
+.download a:focus-visible,.download button:focus-visible{outline-color:#153d80;outline-offset:-4px}
+@media(max-width:650px){.download-picker,.download-control{width:100%}.download-control .btn{flex:1;width:auto}.download-options{width:100%;max-width:100%}.download-actions{align-items:stretch}}
 </style>
 </head>
 <body>
@@ -44,10 +59,45 @@
 <div class="showcase reveal"><div class="showtext"><span class="eyebrow" id="preview-index">01 / HOME</span><h3 id="preview-title">一天，从清楚的安排开始。</h3><p id="preview-description">问候、日期与课程时间轴，打开首页就知道接下来去哪里。</p><div class="tabs" role="tablist" aria-label="应用截图"><button class="tab" id="shot-0" role="tab" aria-selected="true" aria-controls="shot-panel" data-shot="0">首页课表</button><button class="tab" id="shot-1" role="tab" aria-selected="false" aria-controls="shot-panel" tabindex="-1" data-shot="1">功能列表</button><button class="tab" id="shot-2" role="tab" aria-selected="false" aria-controls="shot-panel" tabindex="-1" data-shot="2">数据看板</button><button class="tab" id="shot-3" role="tab" aria-selected="false" aria-controls="shot-panel" tabindex="-1" data-shot="3">电费统计</button><button class="tab" id="shot-4" role="tab" aria-selected="false" aria-controls="shot-panel" tabindex="-1" data-shot="4">课程进度</button><button class="tab" id="shot-5" role="tab" aria-selected="false" aria-controls="shot-panel" tabindex="-1" data-shot="5">作业汇总</button></div><div class="hint">点击预览图片，可放大查看 ↗</div></div><div id="shot-panel" role="tabpanel" aria-labelledby="shot-0"><button class="preview" id="zoom" aria-label="放大首页课表截图" style="width:100%;height:100%"><img id="shot-image" src="assets/首页.png" alt="首页课表截图" width="1291" height="2751" loading="lazy"></button><button class="preview" id="zoom-extra" aria-label="放大功能列表第二张截图" hidden><img src="assets/功能列表2.png" alt="校园生活与资源功能列表" width="1291" height="2751" loading="lazy"></button></div></div>
 <div class="experience"><article class="reveal"><h3>你的界面，由你定义。</h3><p>MD3 与 MIUIX 双风格、深浅色主题、字体大小与首页布局。Android 还可跟随壁纸动态取色，让熟悉的校园带上你的色彩。</p></article><article class="reveal"><h3>熟悉的登录，安心的使用。</h3><p>通过学校官方页面完成认证，登录凭据保留在本机。首次使用有向导陪你设置，常用服务逐一连接。</p></article></div>
 </section>
-<section class="wrap section" id="download"><div class="download reveal"><span class="eyebrow">READY FOR A SIMPLER DAY?</span><h2>让下一天，<br>简单一点。</h2><p>从信大 AIO 开始。选择你的平台，前往发布页获取应用。</p><div class="platforms" aria-label="选择下载平台"><button aria-pressed="true" data-platform="Android">Android</button><button aria-pressed="false" data-platform="iOS">iOS</button><button aria-pressed="false" data-platform="macOS">macOS</button><button aria-pressed="false" data-platform="Windows">Windows</button></div><p class="platform-note" id="platform-note" aria-live="polite">Android · 在发布页下载 APK 安装包。应用内支持自动检查更新。</p><div class="actions"><a class="btn" href="https://gitee.com/ded_retr0/NUIST-AIO/releases" target="_blank" rel="noopener noreferrer">前往 Gitee 下载 <span aria-hidden="true">↗</span></a><a class="btn secondary" href="https://github.com/makabaka11/NUIST-AIO/releases" target="_blank" rel="noopener noreferrer">GitHub Releases <span aria-hidden="true">↗</span></a></div><p style="font-size:12px;margin:24px 0 0">安装包与版本以发布页实际附件为准。</p></div></section>
+<section class="wrap section" id="download"><div class="download reveal"><span class="eyebrow">READY FOR A SIMPLER DAY?</span><h2>让下一天，<br>简单一点。</h2><p>从信大 AIO 开始。选择你的平台，直接下载。</p><div class="platforms" aria-label="选择下载平台"><button aria-pressed="true" data-platform="Android">Android</button><button aria-pressed="false" data-platform="iOS">iOS</button><button aria-pressed="false" data-platform="macOS">macOS</button><button aria-pressed="false" data-platform="Windows">Windows</button></div><p class="platform-note" id="platform-note" aria-live="polite">Android · 首选 64 位 ARM，无法安装时可尝试 32 位 ARM 版本。</p><div class="actions download-actions"><div class="download-picker" id="download-picker"><div class="download-control"><a class="btn" id="download-link" href="https://github.com/makabaka11/NUIST-AIO/releases">下载 Android <span aria-hidden="true">↓</span></a><button id="download-toggle" class="download-toggle" aria-label="选择下载版本" aria-expanded="false" aria-controls="download-options" hidden>⌄</button></div><div class="download-options" id="download-options" aria-label="可下载的版本" hidden></div></div><a class="btn secondary" href="https://github.com/makabaka11/NUIST-AIO/releases" target="_blank" rel="noopener noreferrer">版本日志 <span aria-hidden="true">↗</span></a></div><p class="download-version" id="download-version" aria-live="polite"></p><noscript><p>启用 JavaScript 后可选择平台直接下载，也可访问上方版本日志获取安装包。</p></noscript></div></section>
 </main>
 <footer class="wrap"><div class="footrow"><a class="brand" href="#main"><img src="assets/branding/app_icon.png" alt="">信大 AIO</a><div class="footlinks"><a href="https://github.com/makabaka11/NUIST-AIO/issues" target="_blank" rel="noopener noreferrer">问题反馈 ↗</a><a href="mailto:ded000@retr0.xyz">联系开发者</a><a href="LICENSE">MIT License</a></div></div><p class="disclaimer">© <span id="year">2026</span> Retr0 · 为南信大的每一天而作。<br>非学校官方应用，校园服务的实际可用性以学校系统为准。</p></footer>
 <dialog id="lightbox" aria-label="应用截图放大预览"><button class="close" aria-label="关闭截图">×</button><img alt="放大的应用截图"></dialog>
+<script type="application/json" id="release-downloads">
+{
+  "version": "v0.5.0",
+  "platforms": {
+    "Android": [
+      {
+        "label": "ARM 通用版",
+        "url": "https://gh-proxy.org/https://github.com/makabaka11/NUIST-AIO/releases/download/v0.5.0/nuistaio-v0.5.0-android-universal.apk",
+        "size": 67569566
+      }
+    ],
+    "iOS": [
+      {
+        "label": "未签名 IPA",
+        "url": "https://gh-proxy.org/https://github.com/makabaka11/NUIST-AIO/releases/download/v0.5.0/nuistaio-v0.5.0-ios-unsigned.ipa",
+        "size": 13221394
+      }
+    ],
+    "macOS": [
+      {
+        "label": "Apple / Intel 通用版",
+        "url": "https://gh-proxy.org/https://github.com/makabaka11/NUIST-AIO/releases/download/v0.5.0/nuistaio-v0.5.0-macos-universal.zip",
+        "size": 24634615
+      }
+    ],
+    "Windows": [
+      {
+        "label": "64 位便携版",
+        "url": "https://gh-proxy.org/https://github.com/makabaka11/NUIST-AIO/releases/download/v0.5.0/nuistaio-v0.5.0-windows-x64.zip",
+        "size": 16432303
+      }
+    ]
+  }
+}
+</script>
 <script>
 (()=>{'use strict';const $=s=>document.querySelector(s),root=document.documentElement,theme=$('#theme'),reduced=matchMedia('(prefers-reduced-motion: reduce)'),system=matchMedia('(prefers-color-scheme: dark)');
 function themeLabel(){const dark=root.dataset.theme==='dark';theme.textContent=dark?'☀':'☾';theme.setAttribute('aria-label',dark?'切换白天主题':'切换夜间主题');theme.title=theme.getAttribute('aria-label');theme.setAttribute('aria-pressed',String(dark))}themeLabel();theme.addEventListener('click',()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('nuist-site-theme',root.dataset.theme)}catch{}themeLabel()});system.addEventListener('change',e=>{try{if(localStorage.getItem('nuist-site-theme'))return}catch{}root.dataset.theme=e.matches?'dark':'light';themeLabel()});
@@ -55,7 +105,30 @@ if('IntersectionObserver'in window){root.classList.add('js');const observer=new 
 let ticking=false;function progress(){const max=document.documentElement.scrollHeight-innerHeight;$('.progress').style.transform=`scaleX(${max>0?scrollY/max:0})`;ticking=false}addEventListener('scroll',()=>{if(!ticking){requestAnimationFrame(progress);ticking=true}},{passive:true});addEventListener('resize',progress);progress();
 const shots=[['首页','HOME','一天，从清楚的安排开始。','问候、日期与课程时间轴，打开首页就知道接下来去哪里。'],['功能列表','SERVICES','常用服务，都在这里。','按学习、生活与资源查找校园服务，少记几个网址，多一点方便。'],['数据看板','DASHBOARD','重要的小事，一眼看见。','假期倒计时、校园卡余额、本月支出与宿舍电量，集中在你的首页。'],['电费统计','ELECTRICITY','电量变化，清清楚楚。','查看宿舍剩余电量与历史趋势，了解最近的用电情况。'],['课程任务点展示','COURSES','每一点进度，都看得见。','按课程查看学习通任务点完成数与进度，需要学习时进入官方课程。'],['作业汇总','ASSIGNMENTS','作业和考试，不再分散。','集中查看任务状态，按未完成、待批改等分类筛选。']];let selected=0;const tabs=[...document.querySelectorAll('[data-shot]')],img=$('#shot-image');function select(i,focus=false){selected=i;$('#shot-panel').classList.toggle('paired',i===1);$('#zoom-extra').hidden=i!==1;tabs.forEach((tab,n)=>{tab.setAttribute('aria-selected',String(n===i));tab.tabIndex=n===i?0:-1});if(focus)tabs[i].focus();const s=shots[i];$('#preview-index').textContent=`0${i+1} / ${s[1]}`;$('#preview-title').textContent=s[2];$('#preview-description').textContent=s[3];$('#shot-panel').setAttribute('aria-labelledby',tabs[i].id);img.classList.remove('changed');img.src=`assets/${s[0]}.png`;img.alt=`${s[0]}截图`;$('#zoom').setAttribute('aria-label',`放大${s[0]}截图`);if(!reduced.matches){void img.offsetWidth;img.classList.add('changed')}}tabs.forEach((t,i)=>{t.addEventListener('click',()=>select(i));t.addEventListener('keydown',e=>{let n;if(['ArrowRight','ArrowDown'].includes(e.key))n=(i+1)%tabs.length;if(['ArrowLeft','ArrowUp'].includes(e.key))n=(i+tabs.length-1)%tabs.length;if(e.key==='Home')n=0;if(e.key==='End')n=tabs.length-1;if(n!==undefined){e.preventDefault();select(n,true)}})});
 const dialog=$('#lightbox');$('#zoom').addEventListener('click',()=>{dialog.querySelector('img').src=`assets/${shots[selected][0]}.png`;dialog.querySelector('img').alt=img.alt;dialog.showModal()});$('#zoom-extra').addEventListener('click',()=>{dialog.querySelector('img').src='assets/功能列表2.png';dialog.querySelector('img').alt='校园生活与资源功能列表';dialog.showModal()});dialog.querySelector('.close').addEventListener('click',()=>dialog.close());dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
-const notes={Android:'Android · 在发布页下载 APK 安装包。应用内支持自动检查更新。',iOS:'iOS · 发布页提供未签名 IPA，需要自行签名后安装。',macOS:'macOS · 通用 ZIP 支持 Apple 芯片与 Intel Mac，解压后移入「应用程序」。当前未进行 Apple 公证。',Windows:'Windows · 下载 x64 便携 ZIP，完整解压后运行。当前学校登录及依赖网页会话的查询尚未适配。'};document.querySelectorAll('[data-platform]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-platform]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$('#platform-note').textContent=notes[b.dataset.platform]}));$('#year').textContent=new Date().getFullYear();
+const notes={Android:'Android · 首选 64 位 ARM，无法安装时可尝试 32 位 ARM 版本。',iOS:'iOS · IPA 为未签名版本，需自行签名后安装。',macOS:'macOS · 按 Apple 或 Intel 芯片选择，解压后移入「应用程序」。当前未进行 Apple 公证。',Windows:'Windows · 64 位便携版，完整解压后运行。当前学校登录及依赖网页会话的查询尚未适配。'};
+const release=JSON.parse($('#release-downloads').textContent),picker=$('#download-picker'),toggle=$('#download-toggle'),options=$('#download-options'),download=$('#download-link');
+const platformButtons=[...document.querySelectorAll('[data-platform]')];
+let menuPinned=false;
+const sizeLabel=size=>`${(size/1024/1024).toFixed(1)} MB`;
+function openDownloads(open){const show=open&&!toggle.hidden;if(!show)menuPinned=false;options.hidden=!show;toggle.setAttribute('aria-expanded',String(show))}
+function selectPlatform(platform){
+  openDownloads(false);platformButtons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.platform===platform)));
+  $('#platform-note').textContent=notes[platform];const files=release.platforms[platform]||[];
+  options.replaceChildren();toggle.hidden=files.length<2;
+  if(!files.length){download.textContent='查看可用版本';download.href='https://github.com/makabaka11/NUIST-AIO/releases';$('#download-version').textContent='该平台暂未提供安装包';return}
+  download.textContent=`下载 ${platform} ↓`;download.href=files[0].url;download.setAttribute('aria-label',`下载 ${platform} ${files[0].label}`);
+  $('#download-version').textContent=`${release.version} · ${files[0].label} · ${sizeLabel(files[0].size)}`;
+  if(files.length>1){const list=document.createElement('div');list.className='download-option-list';files.forEach(file=>{const link=document.createElement('a'),label=document.createElement('span'),size=document.createElement('small');link.href=file.url;label.textContent=file.label;size.textContent=sizeLabel(file.size);link.append(label,size);list.append(link)});options.append(list)}
+}
+platformButtons.forEach(b=>b.addEventListener('click',()=>selectPlatform(b.dataset.platform)));
+toggle.addEventListener('click',()=>{if(options.hidden||!menuPinned){openDownloads(true);menuPinned=true}else openDownloads(false)});
+picker.addEventListener('pointerenter',()=>{if(matchMedia('(hover: hover)').matches)openDownloads(true)});
+picker.addEventListener('pointerleave',()=>{if(!picker.contains(document.activeElement))openDownloads(false)});
+picker.addEventListener('focusout',e=>{if(!picker.contains(e.relatedTarget))openDownloads(false)});
+picker.addEventListener('keydown',e=>{if(e.key==='Escape'){openDownloads(false);toggle.focus()}if(e.key==='ArrowDown'&&!toggle.hidden){e.preventDefault();openDownloads(true);options.querySelector('a')?.focus()}});
+document.addEventListener('click',e=>{if(!picker.contains(e.target))openDownloads(false)});
+selectPlatform('Android');
+$('#year').textContent=new Date().getFullYear();
 })();
 </script>
 </body></html>

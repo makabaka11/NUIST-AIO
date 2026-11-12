@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -11,6 +10,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:nuist_aio/src/app.dart';
 import 'package:nuist_aio/src/app_state.dart';
 import 'package:nuist_aio/src/updates/update_model.dart';
+import 'package:nuist_aio/src/updates/update_download.dart';
 import 'package:nuist_aio/src/updates/update_service.dart';
 import 'package:nuist_aio/src/updates/update_ui.dart';
 
@@ -32,7 +32,11 @@ List<AppRelease> releases(
 ], source);
 UpdateController controller({
   Future<List<AppRelease>> Function(UpdateSource)? fetch,
+  UpdateDownload Function()? downloader,
+  Future<String> Function(File)? installer,
 }) => UpdateController(
+  downloader: downloader,
+  installer: installer,
   installed: () async => const InstalledBuild('0.3.5', '14'),
   fetch: fetch ?? (source) async => releases(source),
   runtime: const UpdateRuntime(TargetPlatform.android, 'arm64'),
@@ -68,12 +72,187 @@ class UpdateHttpClient implements HttpClient {
 }
 
 void main() {
+  test('unavailable mirror falls back to the official package', () async {
+    final root = await Directory.systemTemp.createTemp('mirror-fallback');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      await root.delete(recursive: true);
+    });
+    var calls = 0;
+    server.listen((request) async {
+      if (++calls == 1) {
+        request.response.statusCode = 403;
+      } else {
+        request.response.headers.contentType = ContentType.binary;
+        request.response.add([80, 75, 3, 4]);
+      }
+      await request.response.close();
+    });
+    final client = UpdateHttpClient(
+      Uri.parse('http://127.0.0.1:${server.port}'),
+    );
+    final job = UpdateDownload(
+      clientFactory: () => client,
+      directory: () async => root,
+    );
+    final asset = releases(UpdateSource.github).single.assets.single;
+    final file = await job.download(asset, onProgress: (_, _) {});
+    expect(client.requests, [githubUpdateMirror(asset.url), asset.url]);
+    expect(await file.readAsBytes(), [80, 75, 3, 4]);
+  });
+
+  test(
+    'streamed package download reports bytes and removes partial files',
+    () async {
+      final root = await Directory.systemTemp.createTemp('update-test');
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        await root.delete(recursive: true);
+      });
+      var mode = 'success';
+      server.listen((request) async {
+        if (mode == 'html') {
+          request.response.headers.contentType = ContentType.html;
+          request.response.write('<html>Login</html>');
+        } else if (mode == 'redirect') {
+          request.response.statusCode = 302;
+          request.response.headers.set(
+            'location',
+            'http://unsafe.example/file.apk',
+          );
+        } else {
+          request.response.headers.contentType = ContentType.binary;
+          request.response.contentLength = 4;
+          request.response.add([80, 75]);
+          await request.response.flush();
+          request.response.add([3, 4]);
+        }
+        await request.response.close();
+      });
+      final client = UpdateHttpClient(
+        Uri.parse('http://127.0.0.1:${server.port}'),
+      );
+      final job = UpdateDownload(
+        clientFactory: () => client,
+        directory: () async => root,
+      );
+      final counts = <int>[];
+      final asset = ReleaseAsset(
+        'test.apk',
+        Uri.parse('https://github.com/test/test/releases/download/v1/test.apk'),
+      );
+      final file = await job.download(
+        asset,
+        onProgress: (n, total) {
+          counts.add(n);
+          expect(total, 4);
+        },
+      );
+      expect(await file.readAsBytes(), [80, 75, 3, 4]);
+      expect(counts.first, 0);
+      expect(counts.last, 4);
+      expect(client.closed, isTrue);
+      for (final failure in ['html', 'redirect']) {
+        mode = failure;
+        final failedJob = UpdateDownload(
+          clientFactory: () =>
+              UpdateHttpClient(Uri.parse('http://127.0.0.1:${server.port}')),
+          directory: () async => root,
+        );
+        await expectLater(
+          failedJob.download(asset, onProgress: (_, _) {}),
+          throwsFormatException,
+        );
+        expect(await File('${file.path}.part').exists(), isFalse);
+        expect(await file.readAsBytes(), [80, 75, 3, 4]);
+      }
+    },
+  );
+
+  test('cancelled downloads remove partial package', () async {
+    final root = await Directory.systemTemp.createTemp('update-cancel');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final release = Completer<void>();
+    addTearDown(() async {
+      if (!release.isCompleted) release.complete();
+      await server.close(force: true);
+      await root.delete(recursive: true);
+    });
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.binary;
+      request.response.bufferOutput = false;
+      request.response.contentLength = 1024 * 1024;
+      request.response.add(List.filled(32768, 1));
+      await request.response.flush();
+      await release.future;
+      request.response.done.catchError((Object _) => request.response);
+    });
+    final job = UpdateDownload(
+      clientFactory: () =>
+          UpdateHttpClient(Uri.parse('http://127.0.0.1:${server.port}')),
+      directory: () async => root,
+    );
+    await expectLater(
+      job.download(
+        ReleaseAsset(
+          'cancel.apk',
+          Uri.parse('https://github.com/test/test/cancel.apk'),
+        ),
+        onProgress: (received, _) {
+          if (received > 0) job.cancel();
+        },
+      ),
+      throwsA(anything),
+    );
+    expect(await root.list().toList(), isEmpty);
+  });
+
+  test(
+    'GitHub files are mirrored automatically while APIs and Gitee stay direct',
+    () {
+      final asset = releases(UpdateSource.github).single.assets.single;
+      expect(
+        githubUpdateMirror(asset.url).toString(),
+        'https://gh-proxy.org/${asset.url}',
+      );
+      expect(
+        githubUpdateMirror(UpdateSource.github.api),
+        UpdateSource.github.api,
+      );
+      expect(
+        githubUpdateMirror(UpdateSource.gitee.api),
+        UpdateSource.gitee.api,
+      );
+      expect(
+        githubUpdateMirror(githubUpdateMirror(asset.url)),
+        githubUpdateMirror(asset.url),
+      );
+    },
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.empty();
     FlutterSecureStorage.setMockInitialValues({});
   });
+  test(
+    'default source is GitHub and explicitly saved Gitee is preserved',
+    () async {
+      final u = controller();
+      expect(u.source, UpdateSource.github);
+      await u.loadSettings();
+      expect(u.source, UpdateSource.github);
+      await u.setSource(UpdateSource.gitee);
+      final restored = controller();
+      await restored.loadSettings();
+      expect(restored.source, UpdateSource.gitee);
+      u.dispose();
+      restored.dispose();
+    },
+  );
   test('repository uses public source API without credentials and handles invalid responses', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     var status = 200;
@@ -180,7 +359,7 @@ void main() {
       throwsFormatException,
     );
   });
-  test('download selection respects platform and architecture, otherwise uses release page', () {
+  test('download selection respects platform and architecture, unsupported platforms have no package', () {
     final source = UpdateSource.github;
     final release = parseReleases([
       {
@@ -249,7 +428,7 @@ void main() {
       final u = controller(
         fetch: (source) {
           calls++;
-          return source == UpdateSource.gitee
+          return source == UpdateSource.github
               ? old.future
               : Future.value(releases(source));
         },
@@ -257,11 +436,11 @@ void main() {
       final first = u.check();
       expect(identical(first, u.check()), isTrue);
       await Future<void>.delayed(Duration.zero);
-      await u.setSource(UpdateSource.github);
-      expect((await u.check())!.source, UpdateSource.github);
-      old.complete(releases(UpdateSource.gitee));
+      await u.setSource(UpdateSource.gitee);
+      expect((await u.check())!.source, UpdateSource.gitee);
+      old.complete(releases(UpdateSource.github));
       expect(await first, isNull);
-      expect(u.latest!.source, UpdateSource.github);
+      expect(u.latest!.source, UpdateSource.gitee);
       expect(calls, 2);
       u.dispose();
     },
@@ -288,26 +467,20 @@ void main() {
     },
   );
   testWidgets(
-    'startup waits until official login route closes, shows notes and downloads externally',
+    'startup waits for login, downloads in app with progress and requests installation',
     (tester) async {
       final pending = Completer<List<AppRelease>>();
-      final u = controller(fetch: (_) => pending.future);
-      final nav = GlobalKey<NavigatorState>();
-      final launched = <String>[];
-      const channel = MethodChannel('plugins.flutter.io/url_launcher');
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
-        call,
-      ) async {
-        expect(call.arguments['useWebView'], isFalse);
-        launched.add(call.arguments['url'] as String);
-        return true;
-      });
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          channel,
-          null,
-        ),
+      final job = FakeUpdateDownload();
+      final installed = <File>[];
+      final u = controller(
+        fetch: (_) => pending.future,
+        downloader: () => job,
+        installer: (file) async {
+          installed.add(file);
+          return 'requested';
+        },
       );
+      final nav = GlobalKey<NavigatorState>();
       await tester.pumpWidget(
         MaterialApp(
           navigatorKey: nav,
@@ -324,16 +497,20 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      pending.complete(releases(UpdateSource.gitee));
+      pending.complete(releases(UpdateSource.github));
       await tester.pumpAndSettle();
       expect(find.text('发现新版本 v0.4.0'), findsNothing);
       nav.currentState!.pop();
       await tester.pumpAndSettle();
       expect(find.text('修复课表显示'), findsOneWidget);
       await tester.tap(find.text('下载'));
+      await tester.pump();
+      expect(find.text('下载中'), findsOneWidget);
+      expect(find.textContaining('50%'), findsOneWidget);
+      job.done.complete(File('/tmp/update.apk'));
       await tester.pumpAndSettle();
-      expect(launched.single, endsWith('nuistaio-arm64-v8a.apk'));
-      expect(find.text('发现新版本 v0.4.0'), findsNothing);
+      expect(installed.single.path, '/tmp/update.apk');
+      expect(find.text('已请求系统安装，请在系统界面确认。'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       u.dispose();
     },
@@ -411,5 +588,17 @@ void main() {
         state.dispose();
       },
     );
+  }
+}
+
+class FakeUpdateDownload extends UpdateDownload {
+  final done = Completer<File>();
+  @override
+  Future<File> download(
+    ReleaseAsset asset, {
+    required void Function(int, int?) onProgress,
+  }) {
+    onProgress(50, 100);
+    return done.future;
   }
 }

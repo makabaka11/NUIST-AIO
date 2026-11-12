@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'update_model.dart';
+import 'update_download.dart';
 
 class ReleaseRepository {
   ReleaseRepository({HttpClient Function()? clientFactory})
@@ -65,9 +66,13 @@ class UpdateController extends ChangeNotifier {
     Future<List<AppRelease>> Function(UpdateSource)? fetch,
     Future<InstalledBuild> Function()? installed,
     UpdateRuntime? runtime,
+    UpdateDownload Function()? downloader,
+    Future<String> Function(File)? installer,
   }) : fetch = fetch ?? ReleaseRepository().fetch,
        installed = installed ?? _installed,
-       runtime = runtime ?? UpdateRuntime.current();
+       runtime = runtime ?? UpdateRuntime.current(),
+       downloader = downloader ?? UpdateDownload.new,
+       installer = installer ?? installUpdate;
   static Future<InstalledBuild> _installed() async {
     final info = await PackageInfo.fromPlatform();
     return InstalledBuild(info.version, info.buildNumber);
@@ -76,8 +81,10 @@ class UpdateController extends ChangeNotifier {
   final Future<List<AppRelease>> Function(UpdateSource) fetch;
   final Future<InstalledBuild> Function() installed;
   final UpdateRuntime runtime;
+  final UpdateDownload Function() downloader;
+  final Future<String> Function(File) installer;
   final _prefs = SharedPreferencesAsync();
-  UpdateSource source = UpdateSource.gitee;
+  UpdateSource source = UpdateSource.github;
   bool autoCheck = true, remind = true;
   InstalledBuild? current;
   AppRelease? latest;
@@ -105,7 +112,7 @@ class UpdateController extends ChangeNotifier {
       final name = await _prefs.getString('updates.source');
       source = UpdateSource.values.firstWhere(
         (s) => s.name == name,
-        orElse: () => UpdateSource.gitee,
+        orElse: () => UpdateSource.github,
       );
       autoCheck = await _prefs.getBool('updates.auto') ?? true;
       remind = await _prefs.getBool('updates.remind') ?? true;

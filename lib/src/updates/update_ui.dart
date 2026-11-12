@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,16 +18,87 @@ Future<void> showUpdateDialog(
   AppRelease release,
 ) async {
   updates.markPresented(release);
-  final package = release.packageFor(updates.runtime);
   await showDialog<void>(
     context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text('发现新版本 ${release.tag}'),
+    barrierDismissible: false,
+    builder: (_) => _DownloadDialog(updates: updates, release: release),
+  );
+}
+
+class _DownloadDialog extends StatefulWidget {
+  const _DownloadDialog({required this.updates, required this.release});
+  final UpdateController updates;
+  final AppRelease release;
+  @override
+  State<_DownloadDialog> createState() => _DownloadDialogState();
+}
+
+class _DownloadDialogState extends State<_DownloadDialog> {
+  late final download = widget.updates.downloader();
+  bool busy = false;
+  int received = 0;
+  int? total;
+  File? file;
+  String? message;
+
+  @override
+  void dispose() {
+    download.cancel();
+    super.dispose();
+  }
+
+  Future<void> start() async {
+    final asset = widget.release.assetFor(widget.updates.runtime);
+    if (asset == null || busy) return;
+    setState(() {
+      busy = true;
+      message = null;
+    });
+    try {
+      file ??= await download.download(
+        asset,
+        onProgress: (bytes, length) {
+          if (mounted) {
+            setState(() {
+              received = bytes;
+              total = length;
+            });
+          }
+        },
+      );
+      if (!mounted) return;
+      if (widget.updates.runtime.platform == TargetPlatform.android) {
+        final result = await widget.updates.installer(file!);
+        message = result == 'permissionRequired'
+            ? '请允许此应用安装更新，返回后将自动请求安装；也可点击“安装”重试。'
+            : '已请求系统安装，请在系统界面确认。';
+      } else {
+        message = '下载完成：${file!.path}';
+      }
+    } catch (e) {
+      message = e is FormatException
+          ? e.message
+          : '下载或打开安装包失败，请检查网络、存储空间及系统权限后重试。';
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = widget.release.assetFor(widget.updates.runtime);
+    final android = widget.updates.runtime.platform == TargetPlatform.android;
+    return AlertDialog(
+      title: Text('发现新版本 ${widget.release.tag}'),
       content: SizedBox(
         width: 440,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(dialog).height * .48,
+            maxHeight: MediaQuery.sizeOf(context).height * .48,
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -34,14 +106,31 @@ Future<void> showUpdateDialog(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '下载源：${release.source.label}',
-                  style: Theme.of(dialog).textTheme.labelMedium,
+                  '下载源：${widget.release.source.label}',
+                  style: Theme.of(context).textTheme.labelMedium,
                 ),
                 const SizedBox(height: 12),
-                SelectableText(release.notes),
-                if (package == null) ...[
-                  const SizedBox(height: 16),
-                  const Text('该版本未提供当前平台的安装包，下载按钮将打开版本发布页。'),
+                SelectableText(widget.release.notes),
+                const SizedBox(height: 16),
+                if (asset == null) const Text('该版本未提供适合当前平台与架构的安装包。'),
+                if (asset != null) Text(asset.name),
+                if (busy) ...[
+                  const SizedBox(height: 12),
+                  LinearProgressIndicator(
+                    value: total == null
+                        ? null
+                        : (received / total!).clamp(0, 1),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    total == null
+                        ? '已下载 ${(received / 1048576).toStringAsFixed(1)} MB'
+                        : '${(received / total! * 100).toStringAsFixed(0)}% · ${(received / 1048576).toStringAsFixed(1)} / ${(total! / 1048576).toStringAsFixed(1)} MB',
+                  ),
+                ],
+                if (message != null) ...[
+                  const SizedBox(height: 12),
+                  Text(message!),
                 ],
               ],
             ),
@@ -50,32 +139,48 @@ Future<void> showUpdateDialog(
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(dialog),
-          child: const Text('取消'),
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            busy
+                ? '取消下载'
+                : file == null
+                ? '取消'
+                : '关闭',
+          ),
         ),
         FilledButton(
-          onPressed: () async {
-            try {
-              if (await launchUrl(
-                package ?? release.page,
-                mode: LaunchMode.externalApplication,
-              )) {
-                if (dialog.mounted) Navigator.pop(dialog);
-                return;
-              }
-            } catch (_) {}
-            if (dialog.mounted) {
-              showCampusSnackBar(
-                dialog,
-                const SnackBar(content: Text('无法打开下载链接，请检查系统浏览器。')),
-              );
-            }
-          },
-          child: const Text('下载'),
+          onPressed: asset == null || busy
+              ? null
+              : () async {
+                  if (file != null && !android) {
+                    try {
+                      if (!await launchUrl(file!.uri)) {
+                        throw const FormatException('无法打开文件');
+                      }
+                    } catch (_) {
+                      if (mounted) {
+                        setState(() {
+                          message = '无法打开文件，请前往下载目录手动打开：${file!.path}';
+                        });
+                      }
+                    }
+                  } else {
+                    await start();
+                  }
+                },
+          child: Text(
+            busy
+                ? '下载中'
+                : file == null
+                ? '下载'
+                : android
+                ? '安装'
+                : '打开文件',
+          ),
         ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 class UpdateSettingsPage extends StatefulWidget {
@@ -219,7 +324,11 @@ class _UpdateSettingsPageState extends State<UpdateSettingsPage> {
               children: [
                 ListTile(
                   title: const Text('下载源'),
-                  subtitle: const Text('选择应用更新的下载仓库'),
+                  subtitle: Text(
+                    u.source == UpdateSource.github
+                        ? '已内置 GitHub 镜像加速，自动使用'
+                        : '选择应用更新的下载仓库',
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

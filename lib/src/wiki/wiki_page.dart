@@ -71,6 +71,34 @@ const List<WikiEntry> nuistWikiEntries = <WikiEntry>[
 class WikiPage extends StatelessWidget {
   const WikiPage({super.key});
 
+  Future<void> openCampusPolice(BuildContext context) async {
+    const number = '58736110';
+    try {
+      if (await launchUrl(
+        Uri(scheme: 'tel', path: number),
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {}
+    try {
+      await Clipboard.setData(const ClipboardData(text: number));
+      if (context.mounted) {
+        showCampusSnackBar(
+          context,
+          const SnackBar(content: Text('无法打开拨号页，校内报警电话已复制')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        showCampusSnackBar(
+          context,
+          const SnackBar(content: Text('请手动拨打校内报警电话：58736110')),
+        );
+      }
+    }
+  }
+
   Future<void> openForum(BuildContext context) async {
     try {
       if (await launchUrl(
@@ -141,6 +169,12 @@ class WikiPage extends StatelessWidget {
         children: [
           PreferenceGroup(
             children: [
+              PreferenceRow(
+                icon: Icons.local_police_outlined,
+                title: '校内报警电话',
+                subtitle: '58736110 · 点击拨号，不支持时复制',
+                onTap: () => openCampusPolice(context),
+              ),
               PreferenceRow(
                 icon: Icons.local_shipping_outlined,
                 title: '常用收货地址',

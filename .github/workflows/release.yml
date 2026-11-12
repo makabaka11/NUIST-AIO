@@ -155,6 +155,29 @@ jobs:
             gh release create "$RELEASE_TAG" dist/* --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --latest
           fi
 
+  website:
+    name: Update website download links
+    needs: [metadata, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
+      WEBSITE_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Write published asset links to the website
+        run: |
+          python3 tools/ci/site_downloads.py \
+            --repository "$RELEASE_REPOSITORY" \
+            --branch "$WEBSITE_BRANCH" \
+            --tag "$RELEASE_TAG"
+
   mirror:
     name: Sync releases to Gitee
     needs: publish
