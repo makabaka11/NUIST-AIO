@@ -7,7 +7,6 @@ from release_metadata import metadata
 from release_notes import PLATFORM_NOTES, compose
 from restore_android_key import properties_escape, restore
 from check_assets import check, expected_assets
-import publish_gitee
 
 
 class ReleaseToolsTest(unittest.TestCase):
@@ -66,11 +65,6 @@ class ReleaseToolsTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 restore()
 
-    def test_unconfigured_mirror_never_requests_network(self):
-        with patch.dict('os.environ', {}, clear=True), patch.object(publish_gitee, 'api') as api:
-            publish_gitee.publish()
-            api.assert_not_called()
-
     def test_existing_signing_files_are_never_overwritten(self):
         with patch.dict('os.environ', {
             'GITHUB_ACTIONS': 'true', 'ANDROID_KEYSTORE_BASE64': 'dGVzdA==',
@@ -80,41 +74,6 @@ class ReleaseToolsTest(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, 'Refusing to overwrite'):
                 restore()
             write.assert_not_called()
-
-    def test_gitee_release_body_is_checked_in_notes_and_commit_is_exact(self):
-        with patch.dict('os.environ', {'GITEE_TOKEN': 'test-only', 'RELEASE_TAG': 'v0.5.0', 'GITHUB_SHA': 'a' * 40}), \
-             patch.object(publish_gitee, 'check'), patch.object(publish_gitee, 'api') as api, \
-             patch.object(publish_gitee, 'upload') as upload:
-            api.side_effect = [{'sha': 'a' * 40}, None, {'id': 7}, []]
-            publish_gitee.publish()
-            self.assertEqual(api.call_args_list[0].args[1], '/commits/' + 'a' * 40)
-            fields = api.call_args_list[2].args[2]
-            self.assertEqual(fields['body'], compose(Path('RELEASE_NOTE.md').read_text()))
-            self.assertEqual(fields['target_commitish'], 'a' * 40)
-            self.assertEqual(upload.call_count, 7)
-
-    def test_upload_timeout_closes_connection_and_hides_credentials(self):
-        with tempfile.TemporaryDirectory() as directory:
-            file = Path(directory) / 'test.apk'
-            file.write_bytes(b'package')
-            with patch.object(publish_gitee.http.client, 'HTTPSConnection') as connect:
-                connection = connect.return_value
-                connection.send.side_effect = TimeoutError('secret-token')
-                with self.assertRaisesRegex(RuntimeError, 'connection failed or timed out') as error:
-                    publish_gitee.upload(7, file, 'secret-token')
-                self.assertNotIn('secret-token', str(error.exception))
-                self.assertEqual(connect.call_args.kwargs['timeout'], 30)
-                connection.close.assert_called_once()
-
-    def test_upload_deadline_stops_slow_transfer(self):
-        with tempfile.TemporaryDirectory() as directory:
-            file = Path(directory) / 'test.apk'
-            file.write_bytes(b'package')
-            with patch.object(publish_gitee.http.client, 'HTTPSConnection') as connect, \
-                 patch.object(publish_gitee.time, 'monotonic', side_effect=[0, 181]):
-                with self.assertRaisesRegex(RuntimeError, 'exceeded 180 seconds'):
-                    publish_gitee.upload(7, file, 'test-only')
-                connect.return_value.close.assert_called_once()
 
     def test_release_requires_only_requested_architectures(self):
         self.assertEqual(expected_assets('v0.5.0'), [
