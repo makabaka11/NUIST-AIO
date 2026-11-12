@@ -196,7 +196,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                 TextButton.icon(
                   onPressed: widget.onLogin,
                   icon: const Icon(Icons.link),
-                  label: Text(state.connectedAt == null ? '连接校园账号' : '重新连接'),
+                  label: const Text('账号绑定'),
                 ),
                 if (state.connectedAt != null)
                   TextButton.icon(

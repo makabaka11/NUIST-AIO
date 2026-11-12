@@ -79,6 +79,7 @@ void main() {
     final calls = <String>[];
     var fail = false;
     final state = AppState(
+      verifyPortal: () async => true,
       librarySession: FakeSession((task, args) async {
         calls.add(task);
         if (task == 'probe') return {'ok': true, 'ready': true};
@@ -107,6 +108,7 @@ void main() {
     () async {
       final pending = Completer<Map<String, dynamic>>();
       final state = AppState(
+        verifyPortal: () async => true,
         avatarStore: NoAvatarFiles(),
         librarySession: FakeSession((task, args) => pending.future),
       );
@@ -131,6 +133,7 @@ void main() {
     () async {
       final calls = <String>[];
       final state = AppState(
+        verifyPortal: () async => true,
         librarySession: FakeSession((task, args) async {
           calls.add(task);
           return {'ok': true, 'token': 'not-proof'};
@@ -189,6 +192,7 @@ void main() {
   test('wizard initializes library credentials without synchronizing borrowing records', () async {
     final calls = <String>[];
     final state = AppState(
+      verifyPortal: () async => true,
       librarySession: FakeSession((task, args) async {
         calls.add(task);
         return {'ok': true, 'ready': true};
@@ -203,6 +207,7 @@ void main() {
   });
   test('library failure remains isolated from other ready services', () async {
     final state = AppState(
+      verifyPortal: () async => true,
       librarySession: FakeSession(
         (task, args) async => throw const FormatException('offline'),
       ),

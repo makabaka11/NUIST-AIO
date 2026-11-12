@@ -335,6 +335,8 @@ class _CampusAccountsPageState extends State<CampusAccountsPage>
                                 ),
                               ),
                               initialSettings: InAppWebViewSettings(
+                                cacheEnabled: false,
+                                cacheMode: CacheMode.LOAD_NO_CACHE,
                                 javaScriptEnabled: true,
                                 useHybridComposition: false,
                                 preferredContentMode:

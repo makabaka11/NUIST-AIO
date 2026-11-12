@@ -12,6 +12,52 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Native WebView owns the active cookie jar. This encrypted snapshot is not
 /// restored into broader cookie domains or sent by a Dart HTTP client.
 class SessionStore {
+  Future<void> _credentialQueue = Future.value();
+  Future<T> _serializeCredential<T>(Future<T> Function() action) {
+    final operation = _credentialQueue.then((_) => action());
+    _credentialQueue = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return operation;
+  }
+
+  static const _passkeyKey = 'nuist.portal.passkey.v1';
+  Future<Map<String, dynamic>?> readPasskey() async {
+    final raw = await _secure.read(key: _passkeyKey);
+    if (raw == null) return null;
+    final data = jsonDecode(raw) as Map<String, dynamic>;
+    if (data['owner'] != await accountKey()) return null;
+    return Map<String, dynamic>.from(data['bundle'] as Map);
+  }
+
+  Future<void> savePasskey(
+    Map<String, dynamic> bundle, {
+    required String owner,
+  }) => _serializeCredential(() async {
+    if (owner != await accountKey() ||
+        bundle['rpId'] != 'authserver.nuist.edu.cn') {
+      throw const FormatException('账号状态已变化，请重新创建通行密钥。');
+    }
+    for (final key in [
+      'credentialId',
+      'privateKeyPkcs8Pem',
+      'userId',
+      'anonbiometricsd',
+    ]) {
+      if (bundle[key] is! String || (bundle[key] as String).isEmpty) {
+        throw const FormatException('通行密钥数据不完整，请重新创建。');
+      }
+    }
+    await _secure.write(
+      key: _passkeyKey,
+      value: jsonEncode({'owner': owner, 'bundle': bundle}),
+    );
+  });
+
+  Future<void> deletePasskey() =>
+      _serializeCredential(() => _secure.delete(key: _passkeyKey));
+
   static const _libraryKey = 'nuist.library.loans.v1';
   Future<LibraryLoans?> readLibrary() async {
     final raw = await _secure.read(key: _libraryKey);
@@ -150,11 +196,14 @@ class SessionStore {
   Future<bool> capturePortalSession({
     required String accountKey,
     required String displayName,
-  }) async {
+    bool Function()? isCurrent,
+  }) => _serializeCredential(() async {
+    if (isCurrent?.call() == false) return false;
     if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(accountKey)) return false;
     final manager = CookieManager.instance();
     final auth = await manager.getCookies(url: WebUri(origins[0]));
     final portal = await manager.getCookies(url: WebUri(origins[1]));
+    if (isCurrent?.call() == false) return false;
     await _secure.write(
       key: _key,
       value: jsonEncode({
@@ -177,8 +226,8 @@ class SessionStore {
       }),
     );
     _portalRead = null;
-    return true;
-  }
+    return isCurrent?.call() ?? true;
+  });
 
   /// Restore only fully described, exact-host cookies captured by this app.
   /// Unknown scope/security attributes are never inferred. Existing native
@@ -252,12 +301,12 @@ class SessionStore {
     return DateTime.tryParse(data['capturedAt'] as String? ?? '')?.toLocal();
   }
 
-  Future<void> clear() async {
+  Future<void> clear() => _serializeCredential(() async {
     // This app's WebView is dedicated to school login; it is not the system
     // browser cookie store. Do not call the school's global logout endpoint.
     await CookieManager.instance().deleteAllCookies();
     await WebStorageManager.instance().deleteAllData();
     await _secure.delete(key: _key);
     _portalRead = Future.value(null);
-  }
+  });
 }

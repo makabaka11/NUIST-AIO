@@ -61,7 +61,7 @@ test('credit plans and report keep display data without student or audit interna
   const p=await run('creditPlans',{},()=>({faArr:[{value:'synthetic-plan',label:'测试方案',XH:'PRIVATE'}],jbxx:{XM:'PRIVATE'}}));
   assert.equal(p.value.plans[0].value,'synthetic-plan');assert.equal(JSON.stringify(p.value).includes('PRIVATE'),false);
   const {value,calls}=await run('credits',{plan:'synthetic-plan'},key=>key==='queryXyzhbx'?{fanbx:{name:'总学分',creditsEarned:60,creditsRequired:160,children:[{name:'必修',creditsEarned:50,creditsRequired:100,checkCourseVOS:{XH:'PRIVATE'}}]},educationalProgramCompletedCredits:60}: {rows:[{XNXQDM_DISPLAY:'测试学期',XQGPA:0,LJGPA:3.5,XH:'PRIVATE'}],totalSize:1});
-  assert.equal(value.ok,true);assert.equal(value.report.creditsEarned,60);assert.equal(value.rows[0].XQGPA,0);assert.equal(JSON.stringify(value).includes('PRIVATE'),false);
+  assert.equal(value.ok,true);assert.equal(value.report.creditsEarned,60);assert.equal(value.rows[0].XQGPA,undefined);assert.equal(value.rows[0].LJGPA,undefined);assert.equal(JSON.stringify(value).includes('PRIVATE'),false);
   assert.ok(calls.every(c=>!c.path.includes('refresh')&&!c.path.includes('execute')));
 });
 test('business failure and partial pagination do not become false empty success',async()=>{
@@ -84,4 +84,28 @@ test('student profile exports only verified display fields and requires a studen
   assert.deepEqual(value.profile,{name:'测试姓名',studentNumber:'00001234',college:'测试学院',major:'测试专业',grade:'2024级',className:'测试班'});
   assert.equal(JSON.stringify(value).includes('PRIVATE'),false);assert.equal(calls.length,1);assert.ok(calls[0].path.endsWith('/queryXsjbxx.do'));
   for(const jbxx of [null,{}, {XM:'测试姓名'}])assert.equal((await run('studentProfile',{},()=>({jbxx}))).value.ok,false);
+});
+
+test('grade analysis uses official transcript and term APIs, preserves precision, strips identity',async()=>{
+ const {value,calls}=await run('gradeAnalysis',{},key=>key==='cxxsgpa'
+  ?{rows:[{GPA:'3.127',XH:'PRIVATE'}],totalSize:1}
+  :{rows:[{XNXQDM:'2026-2027-1',XNXQDM_DISPLAY:'测试学期',GPA:0,XM:'PRIVATE'}],totalSize:1});
+ assert.equal(value.ok,true);assert.equal(value.gpa,'3.127');assert.equal(value.rows[0].GPA,'0');
+ assert.equal(JSON.stringify(value).includes('PRIVATE'),false);
+ assert.deepEqual(calls.map(x=>x.path),['/jwapp/sys/cjcx/modules/cjfx/cxxsgpa.do','/jwapp/sys/cjcx/modules/cjfx/xscjtjcx.do']);
+ assert.deepEqual(calls[0].fields,{});assert.equal(calls[1].fields.TJLX,'02');assert.equal(calls[1].fields['*order'],'+XNXQDM');
+});
+test('missing or invalid transcript GPA never becomes zero, and empty semesters remain empty',async()=>{
+ for(const GPA of [null,'',undefined,'Infinity','NaN','-1',{},false]){
+  const {value}=await run('gradeAnalysis',{},key=>key==='cxxsgpa'?{rows:[{GPA}],totalSize:1}:{rows:[],totalSize:0});
+  assert.equal(value.ok,true);assert.equal(value.gpa,null);assert.deepEqual(value.rows,[]);
+ }
+ const empty=await run('gradeAnalysis',{},()=>({rows:[],totalSize:0}));assert.equal(empty.value.gpa,null);
+});
+test('term GPA failure preserves transcript GPA and malformed transcript cannot succeed',async()=>{
+ const a=await run('gradeAnalysis',{},key=>key==='cxxsgpa'?{rows:[{GPA:'0.000'}],totalSize:1}:new Error('PRIVATE'));
+ assert.equal(a.value.gpa,'0.000');assert.ok(a.value.termsError);assert(!JSON.stringify(a.value).includes('PRIVATE'));
+ for(const d of [{rows:[{GPA:3}],totalSize:2},{rows:[{GPA:3},{GPA:4}],totalSize:2},{}]){
+  const b=await run('gradeAnalysis',{},()=>d);assert.equal(b.value.ok,false);assert.equal(b.calls.length,1);
+ }
 });

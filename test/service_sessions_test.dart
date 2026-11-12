@@ -133,6 +133,7 @@ void main() {
     () async {
       final t = teaching(), c = card();
       final state = AppState(
+        verifyPortal: () async => true,
         portalSession: fakeCalendar(),
         librarySession: fakeLibrary(),
         cardSession: c,
@@ -158,9 +159,46 @@ void main() {
       ]); // Preserve an existing selected timetable.
     },
   );
+  test('unregistered card application is explicit, retains cache and isolates other services', () async {
+    final state = AppState(
+      verifyPortal: () async => true,
+      teachingSession: teaching(),
+      cardSession: FakeSession(
+        (_, _) async => throw const CardApplicationRejected(),
+      ),
+      librarySession: fakeLibrary(),
+      portalSession: fakeCalendar(),
+    );
+    state.connectedAt = DateTime.now();
+    await state.saveAccounts({
+      'wallet': sampleWallet(),
+    }, generation: state.sessionGeneration);
+    await state.connectCampusServices(synchronizeData: false);
+    expect(state.servicesNotice, contains('应用未注册'));
+    expect(state.servicesNotice, isNot(contains('重新连接校园账号')));
+    expect(
+      state.siteMessages[SchoolSiteId.campusCard],
+      CardApplicationRejected.description,
+    );
+    expect(
+      state.sitePhase(SchoolSites.get(SchoolSiteId.campusCard)),
+      SitePhase.failed,
+    );
+    expect(
+      state.sitePhase(SchoolSites.get(SchoolSiteId.teaching)),
+      SitePhase.ready,
+    );
+    expect(
+      state.sitePhase(SchoolSites.get(SchoolSiteId.library)),
+      SitePhase.ready,
+    );
+    expect(state.accounts.wallet!.balance, 1234);
+    state.dispose();
+  });
   test('teaching failure does not prevent card synchronization', () async {
     final c = card();
     final state = AppState(
+      verifyPortal: () async => true,
       portalSession: fakeCalendar(),
       librarySession: fakeLibrary(),
       cardSession: c,
@@ -176,6 +214,7 @@ void main() {
     'empty account results do not report successful synchronization',
     () async {
       final state = AppState(
+        verifyPortal: () async => true,
         portalSession: fakeCalendar(),
         librarySession: fakeLibrary(),
         teachingSession: teaching(),
@@ -191,6 +230,7 @@ void main() {
     final pending = Completer<Map<String, dynamic>>();
     final t = FakeSession((_, _) => pending.future), c = card();
     final state = AppState(
+      verifyPortal: () async => true,
       portalSession: fakeCalendar(),
       librarySession: fakeLibrary(),
       cardSession: c,
@@ -215,6 +255,7 @@ void main() {
       return {'ok': true, 'ready': true};
     });
     final state = AppState(
+      verifyPortal: () async => true,
       portalSession: fakeCalendar(),
       librarySession: fakeLibrary(),
       cardSession: c,
@@ -246,6 +287,7 @@ void main() {
     () async {
       final c = card(), t = teaching();
       final state = AppState(
+        verifyPortal: () async => true,
         portalSession: fakeCalendar(),
         librarySession: fakeLibrary(),
         cardSession: c,
@@ -267,6 +309,7 @@ void main() {
     (tester) async {
       final pending = Completer<Map<String, dynamic>>();
       final state = AppState(
+        verifyPortal: () async => true,
         portalSession: fakeCalendar(),
         librarySession: fakeLibrary(),
         cardSession: FakeSession((task, args) => pending.future),
@@ -285,7 +328,7 @@ void main() {
       expect(state.connectingServices, isTrue);
       pending.complete({'ok': true, 'ready': true});
       await tester.pumpAndSettle();
-      expect(find.text('已检查 3 / 3 个已接入子站点'), findsOneWidget);
+      expect(find.text('已检查 4 / 4 个已接入子站点'), findsOneWidget);
       expect(
         state.sitePhase(SchoolSites.get(SchoolSiteId.library)),
         SitePhase.ready,
@@ -302,6 +345,7 @@ void main() {
     (tester) async {
       final c = card(), t = teaching();
       final state = AppState(
+        verifyPortal: () async => true,
         portalSession: fakeCalendar(),
         librarySession: fakeLibrary(),
         cardSession: c,
@@ -322,6 +366,7 @@ void main() {
     (tester) async {
       final c = card(),
           state = AppState(
+            verifyPortal: () async => true,
             portalSession: fakeCalendar(),
             librarySession: fakeLibrary(),
             cardSession: c,

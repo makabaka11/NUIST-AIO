@@ -40,6 +40,23 @@ try {
     const r=await rows('sys/cjcx/modules/cjcx/xscjcx.do','xscjcx',{querySetting:JSON.stringify(filters),'*order':'-XNXQDM,-KCH,-KXH'});
     return {ok:true,rows:r.map(x=>pick(x,['KCM','KCH','ZCJ','XSZCJMC','DJCJMC','XF','XFJD','JDF','XNXQDM','XNXQDM_DISPLAY','SFJG','SFJG_DISPLAY','KCXZDM_DISPLAY','CXCKDM_DISPLAY','SJKSRQ']))};
   }
+  if(task==='gradeAnalysis') {
+    // Observed on the official cjcx/#/cjfx page 2026-11-12. The transcript
+    // statistic is not the credit-report GPA or an average of semester GPAs.
+    const gpa=value=>{
+      if(typeof value!=='string'&&typeof value!=='number')return null;
+      const text=String(value).trim();
+      return /^\d+(?:\.\d+)?$/.test(text)&&Number.isFinite(Number(text))?text:null;
+    };
+    const d=await data('sys/cjcx/modules/cjfx/cxxsgpa.do','cxxsgpa');
+    if(!Array.isArray(d.rows)||d.rows.length>1||Number(d.totalSize)>d.rows.length)throw Error('成绩单 GPA 返回格式异常，请查看成绩分析原网页。');
+    let terms=[],termsError=null;
+    try {
+      const r=await rows('sys/cjcx/modules/cjfx/xscjtjcx.do','xscjtjcx',{TJLX:'02','*order':'+XNXQDM'});
+      terms=r.map(x=>({...pick(x,['XNXQDM','XNXQDM_DISPLAY']),GPA:gpa(x.GPA)}));
+    } catch (_) {termsError='学期 GPA 暂未读取，请重试或查看成绩分析原网页。';}
+    return {ok:true,gpa:gpa(d.rows[0]?.GPA),rows:terms,termsError};
+  }
   if(task==='exams') {
     if(!/^\d{4}-\d{4}-[123]$/.test(a.term||''))throw Error('请选择有效学期。');
     const d=await data('sys/studentWdksapApp/WdksapController/cxxsksap.do','cxxsksap',{requestParamStr:JSON.stringify({XNXQDM:a.term,'*order':'-KSRQ,-KSSJMS'})});
@@ -66,7 +83,7 @@ try {
     function node(x,depth=0){return {...pick(x,['name','creditsRequired','creditsEarned','creditsTaken','creditsSelection']),children:depth<8?(x.children||[]).map(y=>node(y,depth+1)):[]};}
     const r=await rows('sys/byshapp/modules/grbg/cxxsxqxf.do','cxxsxqxf',{PYFADM:a.plan});
     return {ok:true,report:node(d.fanbx),calculatedTime:d.calculatedTime,completed:d.educationalProgramCompletedCredits,outside:d.outEducationalProgramCompletedCredits,
-      rows:r.map(x=>pick(x,['XNXQDM','XNXQDM_DISPLAY','YXXF','YHXF','BJGXF','WLCJXF','XQGPA','LJGPA']))};
+      rows:r.map(x=>pick(x,['XNXQDM','XNXQDM_DISPLAY','YXXF','YHXF','BJGXF','WLCJXF']))};
   }
   if(task==='roomsOptions') {
     const buildings=await rows('sys/kxjas/modules/kxjas/jxlcx.do','jxlcx',{'*order':'+XXXQDM,+PX,+JXLDM'});

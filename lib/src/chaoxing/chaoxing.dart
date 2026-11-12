@@ -8,25 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../services/site_registry.dart';
+import '../services/navigation.dart';
 import '../services/sso_diagnostics.dart';
 import '../services/script_result.dart';
 import 'current_term.dart';
 import 'course_selection.dart';
 
-const chaoxingHosts = {
-  'passport2.chaoxing.com',
-  'mooc1-api.chaoxing.com',
-  'mooc1.chaoxing.com',
-  'mooc2-ans.chaoxing.com',
-  'i.chaoxing.com',
-  'i.mooc.chaoxing.com',
-};
-bool chaoxingNavigation(Uri? u) =>
-    u != null &&
-    u.scheme == 'https' &&
-    chaoxingHosts.contains(u.host) &&
-    u.userInfo.isEmpty &&
-    u.port == 443;
+const chaoxingHosts = SchoolNavigation.chaoxingHosts;
+bool chaoxingNavigation(Uri? uri) => SchoolNavigation.chaoxing(uri);
 
 /// Observed in the official login page and native login callbacks: the default
 /// successful-login destination is the legacy HTTP i.mooc root. Never load it
@@ -612,7 +601,8 @@ class ChaoxingRepository extends ChangeNotifier {
   final _preferences = SharedPreferencesAsync();
   Future<void> _preferenceWrite = Future<void>.value();
   Future<bool>? _restoring;
-  bool _restoreAttempted = false;
+  bool _restoreAttempted = false, _restoringNow = false;
+  bool rememberedConnection = false;
 
   // Only connection intent is stored here. Credentials stay in the native jar.
   Future<void> _rememberConnection(bool value) {
@@ -621,10 +611,14 @@ class ChaoxingRepository extends ChangeNotifier {
         .then((_) => _preferences.setBool(_connectionKey, value));
   }
 
-  /// Called on demand when opening Learning/Chaoxing, never during onboarding
-  /// initialization. A saved intent is not proof of server authentication.
-  Future<bool> restoreConnection() {
+  /// Restores a previously connected account during parallel initialization or
+  /// on demand. Saved connection intent is never proof of authentication.
+  Future<bool> restoreConnection({bool retry = false}) {
     if (verified) return Future.value(true);
+    if (retry && !busy && !_restoringNow) {
+      _restoring = null;
+      _restoreAttempted = false;
+    }
     return _restoring ??= _restoreConnection();
   }
 
@@ -632,6 +626,7 @@ class ChaoxingRepository extends ChangeNotifier {
     if (verified) return true;
     if (_restoreAttempted || busy || disposed) return false;
     _restoreAttempted = true;
+    _restoringNow = true;
     final token = generation;
     try {
       var remembered = await _preferences.getBool(_connectionKey);
@@ -644,7 +639,9 @@ class ChaoxingRepository extends ChangeNotifier {
         remembered = await const MethodChannel('nuistaio/chaoxing')
             .invokeMethod<bool>('hasCourseCookies');
       }
-      if (remembered != true || token != generation || disposed) return false;
+      if (token != generation || disposed) return false;
+      rememberedConnection = remembered == true;
+      if (!rememberedConnection) return false;
       await verify();
       return token == generation && !disposed && verified;
     } catch (_) {
@@ -654,6 +651,8 @@ class ChaoxingRepository extends ChangeNotifier {
         changed();
       }
       return false;
+    } finally {
+      if (token == generation) _restoringNow = false;
     }
   }
 
@@ -687,6 +686,7 @@ class ChaoxingRepository extends ChangeNotifier {
       check(token);
       await _rememberConnection(true);
       check(token);
+      rememberedConnection = true;
       verified = true;
       notice = '课程接口已验证。';
     } catch (_) {
@@ -923,6 +923,7 @@ class ChaoxingRepository extends ChangeNotifier {
 
   Future<void> close({bool clearCookies = false}) async {
     generation++;
+    if (clearCookies) rememberedConnection = false;
     confirmCourseSelection(null);
     selection = null;
     selectedCourseKeys = {};
@@ -934,6 +935,7 @@ class ChaoxingRepository extends ChangeNotifier {
               .then((_) => _selectionStore.delete(key: _selectionKey)))
         : null;
     _restoring = null;
+    _restoringNow = false;
     _restoreAttempted = clearCookies;
     verified = false;
     busy = false;
@@ -944,6 +946,7 @@ class ChaoxingRepository extends ChangeNotifier {
     totalCourseCount = 0;
     selectedCourseCount = 0;
     notice = null;
+    noticeIsError = false;
     updatedAt = null;
     progress = '';
     if (_pending?.isCompleted == false) {

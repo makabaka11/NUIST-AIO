@@ -1,5 +1,20 @@
 /// Shared policy for visible and background school SSO pages.
 class SchoolNavigation {
+  static const chaoxingHosts = {
+    'passport2.chaoxing.com',
+    'mooc1-api.chaoxing.com',
+    'mooc1.chaoxing.com',
+    'mooc2-ans.chaoxing.com',
+    'i.chaoxing.com',
+    'i.mooc.chaoxing.com',
+  };
+  static bool chaoxing(Uri? uri) =>
+      uri != null &&
+      uri.scheme == 'https' &&
+      chaoxingHosts.contains(uri.host) &&
+      uri.userInfo.isEmpty &&
+      uri.port == 443;
+
   static final portalCasEntry = Uri.https(
     'authserver.nuist.edu.cn',
     '/authserver/login',

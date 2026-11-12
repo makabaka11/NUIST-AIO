@@ -33,6 +33,7 @@ class _CampusNetworkLifecycleState extends State<CampusNetworkLifecycle>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed &&
         !widget.state.networkLinks.checking) {
+      unawaited(widget.state.maintainPortal());
       unawaited(widget.state.detectNetworkLinks(force: true));
     }
   }

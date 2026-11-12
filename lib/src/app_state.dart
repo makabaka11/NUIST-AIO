@@ -19,6 +19,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/session_store.dart';
+import 'auth/portal_auth.dart';
 import 'network/campus_network.dart';
 import 'network/link_detector.dart';
 import 'updates/update_service.dart';
@@ -52,6 +53,7 @@ enum UiStyle {
 
 class AppState extends ChangeNotifier {
   AppState({
+    this.verifyPortal,
     ServiceSession? cardSession,
     ServiceSession? teachingSession,
     ServiceSession? portalSession,
@@ -81,11 +83,85 @@ class AppState extends ChangeNotifier {
              teachingSession ??
              NativeServiceSession(site: SchoolSites.get(SchoolSiteId.teaching)),
        } {
+    chaoxing.addListener(_chaoxingSessionChanged);
     networkLinks =
         linkDetector ??
         CampusLinkDetector(directory: () => bulletins.vpn.query('probe', {}));
     networkLinks.addListener(_networkChanged);
+    final card = serviceSessions[SchoolSiteId.campusCard];
+    if (card is NativeServiceSession) {
+      card.renewAuthentication = () async {
+        if (!passkeyEnabled) return false;
+        return ensurePortal(forcePasskey: true);
+      };
+    }
+    final vpn = bulletins.vpn;
+    if (vpn is NativeServiceSession) {
+      vpn.beforeConnect = () async {
+        if (passkeyEnabled && !await ensurePortal()) {
+          throw const FormatException('统一认证需要重新登录，请前往账号绑定。');
+        }
+      };
+    }
   }
+  final Future<bool> Function()? verifyPortal;
+  final PortalAuth portalAuth = PortalAuth();
+  Future<bool>? _portalCheck;
+  Future<bool> ensurePortal({bool forcePasskey = false}) =>
+      _portalCheck ??= (() async {
+        try {
+          return await (verifyPortal?.call() ??
+              portalAuth.verify(sessions, forcePasskey: forcePasskey));
+        } finally {
+          _portalCheck = null;
+        }
+      })();
+  DateTime? _lastPortalMaintenance;
+  Future<void> maintainPortal() async {
+    if (_disposed ||
+        !passkeyEnabled ||
+        connectedAt == null ||
+        connectingServices) {
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastPortalMaintenance != null &&
+        now.difference(_lastPortalMaintenance!) < const Duration(minutes: 5)) {
+      return;
+    }
+    _lastPortalMaintenance = now;
+    final generation = sessionGeneration;
+    bool ready = false;
+    try {
+      ready = await ensurePortal();
+    } catch (_) {
+      /* Fixed safe UI below. */
+    }
+    if (_disposed || generation != sessionGeneration) return;
+    if (!ready) {
+      servicesNotice = '统一认证自动登录未完成，请在“我的 → 账号绑定”重新登录或重新创建通行密钥。';
+      _setSite(SchoolSiteId.identity, SitePhase.failed, servicesNotice!);
+      _setSite(SchoolSiteId.portal, SitePhase.failed, servicesNotice!);
+    }
+  }
+
+  bool passkeyEnabled = false;
+  Future<void> refreshPasskey() async {
+    try {
+      passkeyEnabled = await sessions.readPasskey() != null;
+    } catch (_) {
+      passkeyEnabled = false;
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> disablePasskey() async {
+    await portalAuth.close();
+    await sessions.deletePasskey();
+    passkeyEnabled = false;
+    if (!_disposed) notifyListeners();
+  }
+
   final UpdateController updates;
   late final CampusLinkDetector networkLinks;
   void _networkChanged() {
@@ -100,11 +176,33 @@ class AppState extends ChangeNotifier {
   Future<Uri> resolveBrowserLink(SchoolBrowserLink link) => networkLinks
       .resolve(link, networkMode, studentNumber: studentProfile?.studentNumber);
   final ChaoxingRepository chaoxing;
+  void _chaoxingSessionChanged() {
+    if (_disposed) return;
+    final phase = chaoxing.verified
+        ? SitePhase.ready
+        : chaoxing.busy
+        ? SitePhase.connecting
+        : chaoxing.noticeIsError
+        ? SitePhase.failed
+        : SitePhase.planned;
+    final message = chaoxing.verified
+        ? '学习通会话已验证'
+        : chaoxing.busy
+        ? '正在恢复学习通会话…'
+        : chaoxing.noticeIsError
+        ? '学习通会话恢复未完成，请在官方页面登录或重试'
+        : '尚未连接学习通，可在账号设置中登录';
+    if (sitePhases[SchoolSiteId.chaoxing] != phase ||
+        siteMessages[SchoolSiteId.chaoxing] != message) {
+      _setSite(SchoolSiteId.chaoxing, phase, message);
+    }
+  }
+
   Future<bool> restoreChaoxing() async {
     final generation = sessionGeneration;
     final restored = await chaoxing.restoreConnection();
     if (_disposed || generation != sessionGeneration || !restored) return false;
-    if (!chaoxing.busy && chaoxing.updatedAt == null) {
+    if (!connectingServices && !chaoxing.busy && chaoxing.updatedAt == null) {
       unawaited(refreshChaoxing());
     }
     return true;
@@ -461,7 +559,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> connectCampusServices({bool synchronizeData = true}) async {
+  Future<void> connectCampusServices({
+    bool synchronizeData = true,
+    bool forcePasskey = false,
+  }) async {
     if (connectingServices) return;
     if (connectedAt == null) {
       servicesNotice = '请先连接校园账号，再初始化校园服务。';
@@ -478,12 +579,14 @@ class AppState extends ChangeNotifier {
     }
     notifyListeners();
     final failures = <String>[];
+    final teachingReady = Completer<bool>();
     Future<void> connectTeaching() async {
       _setSite(SchoolSiteId.teaching, SitePhase.connecting, '正在获取教务会话…');
       try {
         final terms = await teachingSession.query('semesters', {});
         if (generation != sessionGeneration) return;
         _setSite(SchoolSiteId.teaching, SitePhase.ready, '教务会话已验证');
+        if (!teachingReady.isCompleted) teachingReady.complete(true);
         if (synchronizeData && schedule == null) {
           final current = terms['current'];
           final list = (terms['terms'] as List? ?? []);
@@ -507,6 +610,7 @@ class AppState extends ChangeNotifier {
         if (generation == sessionGeneration) {
           _setSite(SchoolSiteId.teaching, SitePhase.failed, '需要重试或在教务页面完成额外验证');
         }
+        if (!teachingReady.isCompleted) teachingReady.complete(false);
         failures.add('教务自动连接未完成，可在“学习”中重试');
       }
     }
@@ -541,21 +645,93 @@ class AppState extends ChangeNotifier {
         if ((data['errors'] as List? ?? []).isNotEmpty) {
           failures.add('部分校园账户未更新，可在账户页重试');
         }
-      } catch (_) {
+      } catch (error) {
         if (generation == sessionGeneration) {
           _setSite(
             SchoolSiteId.campusCard,
             SitePhase.failed,
-            '需要重试或在一卡通页面完成额外验证',
+            error is CardApplicationRejected
+                ? CardApplicationRejected.description
+                : '需要重试或在一卡通页面完成额外验证',
           );
         }
-        failures.add('一卡通自动连接未完成，可在“校园账户”中重试');
+        failures.add(
+          error is CardApplicationRejected
+              ? CardApplicationRejected.description
+              : '一卡通自动连接未完成，可在“校园账户”中重试',
+        );
       }
     }
 
+    Future<void> connectChaoxingSession() async {
+      _setSite(SchoolSiteId.chaoxing, SitePhase.connecting, '正在恢复学习通会话…');
+      await chaoxing.restoreConnection(retry: true);
+      if (_disposed || generation != sessionGeneration) return;
+      _chaoxingSessionChanged();
+      if (!chaoxing.verified &&
+          (chaoxing.rememberedConnection || chaoxing.noticeIsError)) {
+        failures.add('学习通会话恢复未完成，可在学习通页面重试');
+      }
+    }
+
+    Future<void> initialize(SchoolSite site) => switch (site.id) {
+      SchoolSiteId.chaoxing => connectChaoxingSession(),
+      SchoolSiteId.teaching => connectTeaching(),
+      SchoolSiteId.campusCard => connectCard(),
+      SchoolSiteId.library => () async {
+        await connectLibrary(synchronizeData: false);
+        if (generation == sessionGeneration && !libraryVerified) {
+          failures.add('图书馆未连接，可在官方页面完成认证后重试');
+        }
+      }(),
+      _ => Future<void>.error(
+        StateError('Missing initialization adapter: ${site.id.name}'),
+      ),
+    };
+
+    // Chaoxing has independent credentials, so even a failed portal probe must
+    // neither delay its restoration nor overwrite its result.
+    final independent = initialize(SchoolSites.get(SchoolSiteId.chaoxing));
+    if (synchronizeData) {
+      unawaited(() async {
+        await independent;
+        final ready = await teachingReady.future;
+        if (!_disposed &&
+            generation == sessionGeneration &&
+            ready &&
+            chaoxing.verified &&
+            !chaoxing.busy) {
+          // Scanning and manual confirmation are independent of initialization.
+          await refreshChaoxing();
+        }
+      }());
+    }
+    final campusSites = SchoolSites.automatic.where(
+      (site) => site.id != SchoolSiteId.chaoxing,
+    );
     try {
+      _setSite(SchoolSiteId.identity, SitePhase.connecting, '正在验证统一认证…');
+      bool authenticated = false;
+      try {
+        authenticated = await ensurePortal(forcePasskey: forcePasskey);
+      } catch (_) {
+        /* Show a fixed safe message below. */
+      }
+      if (generation != sessionGeneration || syncId != _serviceSyncId) return;
+      if (!authenticated) {
+        const message = '统一认证已失效或暂时无法验证，请在“我的 → 账号绑定”重新登录，或使用通行密钥自动登录。';
+        _setSite(SchoolSiteId.identity, SitePhase.failed, message);
+        _setSite(SchoolSiteId.portal, SitePhase.failed, message);
+        for (final site in campusSites) {
+          _setSite(site.id, SitePhase.failed, '主账号未通过验证，已跳过检查');
+        }
+        servicesNotice = message;
+        return;
+      }
+      _setSite(SchoolSiteId.identity, SitePhase.ready, '统一认证已验证');
+      _setSite(SchoolSiteId.portal, SitePhase.ready, '门户账号探针已通过');
       await initializeSiteGraph(
-        sites: SchoolSites.automatic,
+        sites: campusSites,
         ready: (id) =>
             generation == sessionGeneration &&
             sitePhase(SchoolSites.get(id)) == SitePhase.ready,
@@ -565,19 +741,7 @@ class AppState extends ChangeNotifier {
             failures.add('${site.label}的依赖站点未就绪');
           }
         },
-        initialize: (site) => switch (site.id) {
-          SchoolSiteId.teaching => connectTeaching(),
-          SchoolSiteId.campusCard => connectCard(),
-          SchoolSiteId.library => () async {
-            await connectLibrary(synchronizeData: false);
-            if (generation == sessionGeneration && !libraryVerified) {
-              failures.add('图书馆未连接，可在官方页面完成认证后重试');
-            }
-          }(),
-          _ => Future<void>.error(
-            StateError('Missing initialization adapter: ${site.id.name}'),
-          ),
-        },
+        initialize: initialize,
       );
       if (generation == sessionGeneration &&
           sitePhase(SchoolSites.get(SchoolSiteId.teaching)) ==
@@ -598,12 +762,15 @@ class AppState extends ChangeNotifier {
         await syncCalendar();
         if (calendarNotice != null) failures.add('校历未更新，可稍后重试');
       }
+      await independent;
       if (generation == sessionGeneration) {
         servicesNotice = failures.isEmpty
             ? (synchronizeData ? '教务、一卡通和图书馆已自动连接，数据已同步。' : '校园服务初始化完成。')
             : failures.join('；');
       }
     } finally {
+      if (!teachingReady.isCompleted) teachingReady.complete(false);
+      await independent;
       if (syncId == _serviceSyncId && !_disposed) {
         connectingServices = false;
         notifyListeners();
@@ -619,6 +786,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> resetServiceSessions() async {
     _serviceSyncId++;
+    await portalAuth.close();
     networkLinks.reset();
     await bulletins.close();
     await chaoxing.close(clearCookies: true);
@@ -690,6 +858,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> clearPrivateData() async {
+    sessionGeneration++;
+    _lastPortalMaintenance = null;
+    _serviceSyncId++;
+    await disablePasskey();
     networkLinks.reset();
     _libraryRequest++;
     _calendarRequest++;
@@ -795,6 +967,7 @@ class AppState extends ChangeNotifier {
         orElse: () => CampusPalette.mist,
       );
       connectedAt = await sessions.connectionTime();
+      await refreshPasskey();
       if (!kIsWeb &&
           defaultTargetPlatform == TargetPlatform.macOS &&
           connectedAt != null) {
@@ -853,10 +1026,12 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    unawaited(portalAuth.close());
     _disposed = true;
     updates.dispose();
     networkLinks.removeListener(_networkChanged);
     networkLinks.dispose();
+    chaoxing.removeListener(_chaoxingSessionChanged);
     chaoxing.dispose();
     bulletins.close();
     sessionGeneration++;

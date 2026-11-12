@@ -32,7 +32,8 @@ class _AcademicPageState extends State<AcademicPage> {
   String? error, term, plan;
   List<Semester> terms = [];
   List<Map<String, dynamic>> plans = [], rows = [];
-  Map<String, dynamic>? result;
+  Map<String, dynamic>? result, gradeAnalysis;
+  String? gpaError;
   String keyword = '', gradeTerm = '';
   String examFilter = '全部';
   int request = 0;
@@ -60,6 +61,8 @@ class _AcademicPageState extends State<AcademicPage> {
       plans = [];
       terms = [];
       result = null;
+      gradeAnalysis = null;
+      gpaError = null;
       term = null;
       plan = null;
       busy = false;
@@ -82,6 +85,8 @@ class _AcademicPageState extends State<AcademicPage> {
       error = null;
       rows = [];
       result = null;
+      gradeAnalysis = null;
+      gpaError = null;
     });
     bool valid() =>
         mounted && request == id && widget.state.sessionGeneration == account;
@@ -91,6 +96,17 @@ class _AcademicPageState extends State<AcademicPage> {
         throw const FormatException('当前环境不支持校园 WebView，请使用右上角浏览器入口。');
       }
       Map<String, dynamic> data;
+      if (feature == AcademicFeature.credits) {
+        try {
+          final analysis = await session.query('gradeAnalysis', {});
+          if (!valid()) return;
+          if (analysis['ok'] != true) throw const FormatException('成绩分析查询失败。');
+          gradeAnalysis = analysis;
+        } catch (_) {
+          if (!valid()) return;
+          gpaError = '成绩单 GPA 暂未读取，请刷新重试。';
+        }
+      }
       if (feature == AcademicFeature.exams && (initialize || terms.isEmpty)) {
         final d = await session.query('semesters', {});
         if (!valid()) return;
@@ -161,28 +177,261 @@ class _AcademicPageState extends State<AcademicPage> {
   );
   Widget summary(String label, Object? value) =>
       Chip(label: Text('$label ${creditNumber(value)}'));
+  ColorScheme statusColors(Color seed) => ColorScheme.fromSeed(
+    seedColor: seed,
+    brightness: Theme.of(context).brightness,
+  );
+
+  Color accentText(Color seed) {
+    final colors = Theme.of(context).colorScheme;
+    final background = colors.surfaceContainerLow.computeLuminance();
+    var color = statusColors(seed).primary;
+    // MIUIX secondary tokens can be grey or intended for disabled controls.
+    // Keep actual information readable against the card in either theme.
+    for (var i = 0; i < 20; i++) {
+      final foreground = color.computeLuminance();
+      final contrast = foreground > background
+          ? (foreground + 0.05) / (background + 0.05)
+          : (background + 0.05) / (foreground + 0.05);
+      if (contrast >= 4.5) break;
+      color = Color.lerp(color, colors.onSurface, 0.15)!;
+    }
+    return color;
+  }
+
+  Widget information(IconData icon, String text, Color color) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Icon(icon, size: 16, color: color),
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Text(text, style: TextStyle(color: color)),
+      ),
+    ],
+  );
+
+  Widget gradeInformation(Map<String, dynamic> row) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 6,
+      children: [
+        Text(
+          academicText(row, 'XNXQDM_DISPLAY'),
+          style: TextStyle(color: colors.onSurfaceVariant),
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            informationTag(
+              '${academicText(row, 'XF')} 学分',
+              colors.secondaryContainer,
+              colors.onSecondaryContainer,
+            ),
+            informationTag(
+              '绩点 ${creditNumber(row['XFJD'])}',
+              colors.tertiaryContainer,
+              colors.onTertiaryContainer,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget informationTag(String text, Color background, Color foreground) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
+        ),
+      );
+
+  Widget examInformation(Map<String, dynamic> row) {
+    return Column(
+      spacing: 6,
+      children: [
+        information(
+          Icons.schedule_outlined,
+          '${academicText(row, 'KSRQ')} · ${academicText(row, 'KSSJMS')}',
+          accentText(const Color(0xff195caf)),
+        ),
+        information(
+          Icons.place_outlined,
+          '${academicText(row, 'XXXQMC')} ${academicText(row, 'JXLMC')} ${academicText(row, 'JASMC')}',
+          accentText(const Color(0xff146c63)),
+        ),
+      ],
+    );
+  }
+
+  Color gradeColor(Map<String, dynamic> row) {
+    final result = [
+      academicText(row, 'SFJG_DISPLAY'),
+      academicText(row, 'XSZCJMC'),
+    ];
+    // Use the school's explicit result rather than guessing a grading scale.
+    if (result.any(['不及格', '不合格', '未通过'].contains)) {
+      return accentText(const Color(0xffba1a1a));
+    }
+    if (result.any(['及格', '合格', '通过', '优秀', '良好'].contains)) {
+      return accentText(const Color(0xff237a50));
+    }
+    return accentText(const Color(0xff195caf));
+  }
+
+  ({Color foreground, Color background}) examColors(
+    Map<String, dynamic> row,
+    DateTime now,
+  ) {
+    final status = examCompleted(row, now);
+    final colors = Theme.of(context).colorScheme;
+    if (status == null) {
+      return (
+        foreground: colors.onSurfaceVariant,
+        background: colors.surfaceContainerHighest,
+      );
+    }
+    final accent = statusColors(
+      status ? const Color(0xff237a50) : const Color(0xff9a5900),
+    );
+    return (
+      foreground: accent.onPrimaryContainer,
+      background: accent.primaryContainer,
+    );
+  }
+
   Widget record(
     String title,
     String subtitle, {
     String? trailing,
     List<String> details = const [],
+    Widget? informationContent,
+    Color? badgeColor,
+    Color? badgeBackground,
   }) => Card(
     color: Theme.of(context).colorScheme.surfaceContainerLow,
-    child: ExpansionTile(
-      title: Text(title.isEmpty ? '未命名' : title),
-      subtitle: Text(subtitle),
-      trailing: trailing == null
-          ? null
-          : Text(trailing, style: Theme.of(context).textTheme.titleMedium),
-      children: [
-        for (final detail in details)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Align(alignment: Alignment.centerLeft, child: Text(detail)),
-          ),
-      ],
+    child: Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        title: Text(
+          title.isEmpty ? '未命名' : title,
+          style: informationContent == null
+              ? null
+              : TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+        ),
+        subtitle: informationContent == null
+            ? Text(subtitle)
+            : Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
+                child: informationContent,
+              ),
+        trailing: trailing == null
+            ? null
+            : badgeColor == null
+            ? Text(trailing, style: Theme.of(context).textTheme.titleMedium)
+            : ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 104),
+                child: badgeBackground == null
+                    ? Text(
+                        trailing,
+                        textAlign: TextAlign.end,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: badgeColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
+                    : informationTag(trailing, badgeBackground, badgeColor),
+              ),
+        children: [
+          for (final detail in details)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: informationContent == null
+                    ? Text(detail)
+                    : Text.rich(
+                        TextSpan(
+                          children: [
+                            if (detail.contains('：'))
+                              TextSpan(
+                                text: detail.substring(
+                                  0,
+                                  detail.indexOf('：') + 1,
+                                ),
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            TextSpan(
+                              text: detail.contains('：')
+                                  ? detail.substring(detail.indexOf('：') + 1)
+                                  : detail,
+                              style: TextStyle(
+                                color: accentText(const Color(0xff146c63)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+        ],
+      ),
     ),
   );
+  Widget gradeAnalysisCard() {
+    final analysis = gradeAnalysis;
+    final terms = maps(analysis?['rows']);
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionTitle('GPA'),
+        if (gpaError != null)
+          Text(gpaError!, style: TextStyle(color: colors.error))
+        else ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(label: Text('成绩单 GPA ${gpaNumber(analysis?['gpa'])}')),
+              for (final term in terms)
+                Chip(
+                  label: Text(
+                    '${academicText(term, 'XNXQDM_DISPLAY').isEmpty ? academicText(term, 'XNXQDM') : academicText(term, 'XNXQDM_DISPLAY')} GPA ${gpaNumber(term['GPA'])}',
+                  ),
+                ),
+            ],
+          ),
+          if (analysis?['gpa'] == null) const Text('暂无成绩单 GPA 数据。'),
+          if (analysis?['termsError'] != null)
+            Text(
+              '${analysis!['termsError']}',
+              style: TextStyle(color: colors.error),
+            )
+          else if (terms.isEmpty)
+            const Text('暂无学期 GPA 数据。'),
+        ],
+      ],
+    );
+  }
+
   Widget creditTree(Map<String, dynamic> node, [int depth = 0]) {
     final required = academicNumber(node['creditsRequired']),
         earned = academicNumber(node['creditsEarned']);
@@ -327,7 +576,7 @@ class _AcademicPageState extends State<AcademicPage> {
                     '${r['XNXQDM']}': '${r['XNXQDM_DISPLAY'] ?? r['XNXQDM']}',
               }, (v) => setState(() => gradeTerm = v)),
               const SizedBox(height: 12),
-              const Text('显示教务有效成绩及每门课程绩点。学校统计 GPA 可在“学业监测”的学期统计中查看。'),
+              const Text('显示教务有效成绩及每门课程绩点。学校成绩单 GPA 可在“学业监测”的成绩分析中查看。'),
             ],
             if (feature == AcademicFeature.grades)
               Padding(
@@ -353,6 +602,8 @@ class _AcademicPageState extends State<AcademicPage> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
+            if (!busy && connected && feature == AcademicFeature.credits)
+              gradeAnalysisCard(),
             if (!busy && result != null) ...[
               if (feature == AcademicFeature.credits &&
                   result!['report'] is Map) ...[
@@ -368,7 +619,7 @@ class _AcademicPageState extends State<AcademicPage> {
                 const SizedBox(height: 12),
                 creditTree(Map<String, dynamic>.from(result!['report'])),
                 Text('学校计算时间：${result!['calculatedTime'] ?? '未提供'}'),
-                const SectionTitle('学期学分与 GPA'),
+                const SectionTitle('学期学分'),
               ] else if (result!.containsKey('rows'))
                 SectionTitle('查询结果 · ${shown.length} 条'),
               if (result!.containsKey('rows') && shown.isEmpty)
@@ -384,7 +635,9 @@ class _AcademicPageState extends State<AcademicPage> {
                     AcademicFeature.rooms => const SizedBox.shrink(),
                     AcademicFeature.grades => record(
                       academicText(r, 'KCM'),
-                      '${academicText(r, 'XNXQDM_DISPLAY')} · ${academicText(r, 'XF')} 学分\n绩点 ${creditNumber(r['XFJD'])}',
+                      '',
+                      informationContent: gradeInformation(r),
+                      badgeColor: gradeColor(r),
                       trailing: academicText(r, 'XSZCJMC').isNotEmpty
                           ? academicText(r, 'XSZCJMC')
                           : academicText(r, 'ZCJ'),
@@ -397,7 +650,10 @@ class _AcademicPageState extends State<AcademicPage> {
                     ),
                     AcademicFeature.exams => record(
                       academicText(r, 'KCM'),
-                      '${academicText(r, 'KSRQ')} · ${academicText(r, 'KSSJMS')}\n${academicText(r, 'XXXQMC')} ${academicText(r, 'JXLMC')} ${academicText(r, 'JASMC')}',
+                      '',
+                      informationContent: examInformation(r),
+                      badgeColor: examColors(r, now).foreground,
+                      badgeBackground: examColors(r, now).background,
                       trailing: switch (examCompleted(r, now)) {
                         true => '已完成',
                         false => '未完成',
@@ -413,7 +669,6 @@ class _AcademicPageState extends State<AcademicPage> {
                       academicText(r, 'XNXQDM_DISPLAY'),
                       '已修 ${creditNumber(r['YXXF'])} · 已获 ${creditNumber(r['YHXF'])} 学分',
                       details: [
-                        '学期 GPA：${creditNumber(r['XQGPA'])} · 累计 GPA：${creditNumber(r['LJGPA'])}',
                         '未通过 ${creditNumber(r['BJGXF'])} · 未录成绩 ${creditNumber(r['WLCJXF'])} 学分',
                       ],
                     ),

@@ -29,7 +29,16 @@ class ChaoxingAccountTile extends StatelessWidget {
       leading: const Icon(Icons.menu_book_outlined),
       title: const Text('学习通登录'),
       subtitle: Text(
-        state.chaoxing.verified ? '课程接口已验证' : '待接入验证 · 在学习通官方页面登录',
+        state.chaoxing.verified
+            ? '课程接口已验证'
+            : state.chaoxing.busy
+            ? '正在恢复学习通会话…'
+            : state.chaoxing.noticeIsError
+            ? '会话恢复未完成 · 点击重新验证'
+            : '未连接 · 在学习通官方页面登录',
+        style: state.chaoxing.noticeIsError && !state.chaoxing.verified
+            ? TextStyle(color: Theme.of(context).colorScheme.error)
+            : null,
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => openChaoxingLogin(context, state),

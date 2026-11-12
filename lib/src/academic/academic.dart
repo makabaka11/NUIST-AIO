@@ -51,3 +51,24 @@ String creditNumber(Object? value) {
   if (n == n.roundToDouble()) return n.toStringAsFixed(0);
   return n.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '');
 }
+
+Uri get gradeAnalysisEntry => Uri.parse(
+  SchoolSites.get(SchoolSiteId.teaching).features
+      .singleWhere((feature) => feature.id == 'gradeAnalysis')
+      .entry!,
+);
+
+/// Keep the official GPA precision (e.g. three decimal places), including zero.
+String gpaNumber(Object? value) {
+  if (value is! String && value is! num) return '—';
+  final text = '$value'.trim();
+  if (!RegExp(r'^\d+(?:\.\d+)?$').hasMatch(text) ||
+      academicNumber(text) == null) {
+    return '—';
+  }
+  return value is String
+      ? text
+      : text.endsWith('.0')
+      ? text.substring(0, text.length - 2)
+      : text;
+}

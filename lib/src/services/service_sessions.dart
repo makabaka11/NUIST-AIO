@@ -11,6 +11,11 @@ import 'navigation.dart';
 import 'site_registry.dart';
 import 'sso_diagnostics.dart';
 
+class CardApplicationRejected extends FormatException {
+  const CardApplicationRejected() : super(description);
+  static const description = '学校统一认证拒绝了一卡通入口（应用未注册），请稍后重试；重新登录无法解决此问题。';
+}
+
 abstract class ServiceSession {
   bool get available;
   Future<Map<String, dynamic>> query(
@@ -27,6 +32,8 @@ class NativeServiceSession implements ServiceSession {
     required this.site,
     this.connectionTimeout = const Duration(seconds: 45),
   });
+  Future<void> Function()? beforeConnect;
+  Future<bool> Function()? renewAuthentication;
   final Duration connectionTimeout;
   final SchoolSite site;
   bool get card => site.id == SchoolSiteId.campusCard;
@@ -50,6 +57,7 @@ class NativeServiceSession implements ServiceSession {
     'roomsOptions',
     'rooms',
     'grades',
+    'gradeAnalysis',
     'exams',
     'studentProfile',
     'creditPlans',
@@ -67,7 +75,9 @@ class NativeServiceSession implements ServiceSession {
     final feature = site.features.singleWhere((f) => f.id == featureId);
     final entry = Uri.parse(feature.entry!);
     final current = await _controller!.getUrl();
-    if (current?.path != entry.path) {
+    if (current?.host != entry.host ||
+        current?.path != entry.path ||
+        current?.fragment != entry.fragment) {
       await _controller!.loadUrl(
         urlRequest: URLRequest(url: WebUri(entry.toString())),
       );
@@ -79,11 +89,13 @@ class NativeServiceSession implements ServiceSession {
       final url = await controller.getUrl();
       if (url?.host == entry.host &&
           url?.scheme == 'https' &&
-          url?.path == entry.path) {
+          url?.path == entry.path &&
+          url?.fragment == entry.fragment) {
         final ready = await controller
             .evaluateJavascript(
               source:
                   'location.origin === ${jsonEncode('https://${entry.host}')} && location.pathname === ${jsonEncode(entry.path)} && '
+                  'location.hash === ${jsonEncode(entry.hasFragment ? '#${entry.fragment}' : '')} && '
                   'document.readyState === "complete" && document.querySelector(${jsonEncode(feature.readySelector)}) !== null && '
                   'typeof window.flutter_inappwebview === "object" && typeof window.flutter_inappwebview.callHandler === "function"',
             )
@@ -159,6 +171,9 @@ class NativeServiceSession implements ServiceSession {
   }
 
   Future<void> _open() async {
+    final generation = _generation;
+    await beforeConnect?.call();
+    if (generation != _generation) throw const FormatException('账号状态已变化，请重试。');
     SsoDiagnostics.record(
       site.id.name,
       'availability',
@@ -166,7 +181,6 @@ class NativeServiceSession implements ServiceSession {
       type: defaultTargetPlatform.name,
     );
     if (!available) throw const FormatException('请在支持 WebView 的客户端连接校园服务。');
-    final generation = _generation;
     SsoDiagnostics.record(site.id.name, 'connect_start', location: site.entry);
     final connected = Completer<bool>();
     _pending = connected;
@@ -174,6 +188,8 @@ class NativeServiceSession implements ServiceSession {
     bool probing = false;
     bool authStarted = site.sessionEntry == null;
     bool documentReady = false;
+    bool renewalAttempted = false;
+    bool applicationRejected = false;
     Future<void> probe() async {
       if (probing ||
           !documentReady ||
@@ -184,11 +200,50 @@ class NativeServiceSession implements ServiceSession {
       probing = true;
       try {
         final uri = await _controller?.getUrl();
-        if (!site.acceptsProbeLocation(
-          uri == null ? null : Uri.tryParse(uri.toString()),
-        )) {
+        final location = uri == null ? null : Uri.tryParse(uri.toString());
+        if (card &&
+            SchoolNavigation.trusted(location, {'authserver.nuist.edu.cn'}) &&
+            {'/authserver', '/authserver/login'}.contains(location!.path)) {
+          final stateScript = await rootBundle.loadString(
+            'assets/js/nuist_auth_page_state.js',
+          );
+          final pageState = await _controller!
+              .evaluateJavascript(source: '(function() {\n$stateScript\n})()')
+              .timeout(const Duration(seconds: 2));
+          if (pageState == 'unregistered') {
+            applicationRejected = true;
+            if (!connected.isCompleted) connected.complete(false);
+            SsoDiagnostics.record(
+              site.id.name,
+              'application_unregistered',
+              ok: false,
+            );
+            return;
+          }
+          if (renewAuthentication == null ||
+              renewalAttempted ||
+              pageState != 'login') {
+            return;
+          }
+          SsoDiagnostics.record(site.id.name, 'cas_login_form', ok: true);
+          renewalAttempted = true;
+          final renewed = await renewAuthentication!();
+          if (generation != _generation || connected.isCompleted) return;
+          SsoDiagnostics.record(site.id.name, 'cas_renewal', ok: renewed);
+          if (!renewed) {
+            failure = '一卡通需要重新认证，请在账号绑定中登录或开启通行密钥自动登录。';
+            connected.complete(false);
+            return;
+          }
+          documentReady = false;
+          await _controller!.loadUrl(
+            urlRequest: URLRequest(
+              url: WebUri((site.authEntry ?? site.entry!).toString()),
+            ),
+          );
           return;
         }
+        if (!site.acceptsProbeLocation(location)) return;
         // A late onLoadStop can refer to a document that is being replaced.
         // evaluateJavascript returns directly via native code, so this check
         // cannot hang waiting for an old document's async JavaScript bridge.
@@ -248,6 +303,10 @@ class NativeServiceSession implements ServiceSession {
         ),
       ),
       initialSettings: InAppWebViewSettings(
+        // CAS redirects can contain a single-use ticket. Never replay a cached
+        // card authentication redirect when rebuilding its origin-local token.
+        cacheEnabled: !card,
+        cacheMode: card ? CacheMode.LOAD_NO_CACHE : CacheMode.LOAD_DEFAULT,
         javaScriptEnabled: true,
         useHybridComposition: false,
         preferredContentMode: UserPreferredContentMode.DESKTOP,
@@ -264,6 +323,14 @@ class NativeServiceSession implements ServiceSession {
       shouldOverrideUrlLoading: (controller, action) async {
         final raw = action.request.url;
         final uri = raw == null ? null : Uri.tryParse(raw.toString());
+        if (SchoolNavigation.trusted(uri, {'authserver.nuist.edu.cn'}) &&
+            uri!.queryParameters.containsKey('service')) {
+          SsoDiagnostics.record(
+            site.id.name,
+            'cas_service',
+            location: Uri.tryParse(uri.queryParameters['service']!),
+          );
+        }
         if (site.navigation!(uri) ||
             (action.isForMainFrame == false &&
                 uri?.toString() == 'about:blank')) {
@@ -326,9 +393,14 @@ class NativeServiceSession implements ServiceSession {
         );
       },
       onLoadStop: (_, url) async {
-        documentReady = site.acceptsProbeLocation(
-          url == null ? null : Uri.tryParse(url.toString()),
-        );
+        final location = url == null ? null : Uri.tryParse(url.toString());
+        documentReady =
+            site.acceptsProbeLocation(location) ||
+            (card &&
+                SchoolNavigation.trusted(location, {
+                  'authserver.nuist.edu.cn',
+                }) &&
+                {'/authserver', '/authserver/login'}.contains(location!.path));
         SsoDiagnostics.record(
           site.id.name,
           'load_stop',
@@ -382,7 +454,12 @@ class NativeServiceSession implements ServiceSession {
         'connect_result',
         ready: success && generation == _generation,
       );
-      if (!success || generation != _generation) throw FormatException(failure);
+      if (!success || generation != _generation) {
+        if (applicationRejected && generation == _generation) {
+          throw const CardApplicationRejected();
+        }
+        throw FormatException(failure);
+      }
       _ready = true;
     } catch (_) {
       if (identical(_view, view)) {

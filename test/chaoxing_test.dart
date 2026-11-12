@@ -64,8 +64,9 @@ void main() {
       final restored = await Future.wait([
         cold.restoreConnection(),
         cold.restoreConnection(),
+        cold.restoreConnection(retry: true),
       ]);
-      expect(restored, [true, true]);
+      expect(restored, [true, true, true]);
       expect(reads, 2);
       expect(cold.verified, true);
       expect(cold.items, isEmpty); // Verification does not scan personal data.
@@ -120,29 +121,28 @@ void main() {
     next.dispose();
   });
 
-  test(
-    'unverified integration cannot initialize or request automatically',
-    () async {
-      var calls = 0;
-      final r = ChaoxingRepository(
-        documentReader: (_, _) async {
-          calls++;
-          return {
-            'ok': true,
-            'courses': [course],
-          };
-        },
-      );
-      final site = SchoolSites.get(SchoolSiteId.chaoxing);
-      expect(site.auth, SiteAuth.unverified);
-      expect(site.automatic, false);
-      expect(site.dependsOn, contains(SchoolSiteId.teaching));
-      await r.refresh();
-      expect(calls, 0);
-      expect(r.verified, false);
-      r.dispose();
-    },
-  );
+  test('automatic restoration is registered but data refresh requires verified login', () async {
+    var calls = 0;
+    final r = ChaoxingRepository(
+      documentReader: (_, _) async {
+        calls++;
+        return {
+          'ok': true,
+          'courses': [course],
+        };
+      },
+    );
+    final site = SchoolSites.get(SchoolSiteId.chaoxing);
+    expect(site.auth, SiteAuth.nativeCookies);
+    expect(site.automatic, true);
+    expect(site.dependsOn, isEmpty);
+    expect(site.probeTask, 'courses');
+    expect(site.navigation!(site.entry), true);
+    await r.refresh();
+    expect(calls, 0);
+    expect(r.verified, false);
+    r.dispose();
+  });
   test(
     'verification is separate from data scan and expiry requires manual login',
     () async {

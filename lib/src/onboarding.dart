@@ -3,6 +3,7 @@ import 'campus_ui.dart';
 import 'app_state.dart';
 import 'accounts/dorm_picker.dart';
 import 'auth/login_page.dart';
+import 'auth/passkey_page.dart';
 import 'theme_settings.dart';
 import 'widgets.dart';
 import 'services/initialization_panel.dart';
@@ -32,7 +33,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
             LoginPage(state: widget.state, initializeServices: false),
       ),
     );
-    if (mounted && widget.state.connectedAt != null) goTo(3);
+    if (mounted && widget.state.connectedAt != null) {
+      await offerPasskey(context, widget.state);
+      if (mounted) goTo(3);
+    }
   }
 
   Future<void> finish() async {

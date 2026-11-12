@@ -149,7 +149,12 @@ void main() {
       if (site.automatic) {
         expect(site.entry, isNotNull);
         expect(site.navigation!(site.entry), isTrue);
-        expect(site.dependsOn, contains(SchoolSiteId.portal));
+        if (site.auth == SiteAuth.nativeCookies) {
+          expect(site.id, SchoolSiteId.chaoxing);
+          expect(site.dependsOn, isEmpty);
+        } else {
+          expect(site.dependsOn, contains(SchoolSiteId.portal));
+        }
         expect(site.asset, startsWith('assets/js/'));
         expect(site.probeTask, isNotEmpty);
         expect(site.probePrefixes, isNotEmpty);

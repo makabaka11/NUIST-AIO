@@ -80,6 +80,110 @@ void main() {
       expect(feature.entry.scheme, 'https');
     }
   });
+  test('GPA formatting preserves official precision and missing values', () {
+    expect(gpaNumber('3.127'), '3.127');
+    expect(gpaNumber('3.000'), '3.000');
+    expect(gpaNumber(0), '0');
+    for (final value in [null, '', 'NaN', 'Infinity', -1, false]) {
+      expect(gpaNumber(value), '—');
+    }
+    expect(gradeAnalysisEntry.fragment, '/cjfx');
+  });
+  for (final mode in ['success', 'gpaFailure', 'creditFailure']) {
+    testWidgets(
+      'academic monitoring separates official GPA from credits: $mode',
+      (tester) async {
+        final session = FakeSession((task, _) async {
+          if (task == 'gradeAnalysis') {
+            if (mode == 'gpaFailure') return {'ok': false};
+            return {
+              'ok': true,
+              'gpa': '3.127',
+              'rows': [
+                {'XNXQDM_DISPLAY': '测试学期', 'GPA': '0.000'},
+              ],
+            };
+          }
+          if (task == 'creditPlans') {
+            return {
+              'ok': true,
+              'plans': [
+                {'value': 'test-plan', 'label': '测试方案'},
+              ],
+            };
+          }
+          if (mode == 'creditFailure') {
+            return {'ok': false, 'error': '学分报告暂不可用'};
+          }
+          return {
+            'ok': true,
+            'report': {
+              'name': '总学分',
+              'creditsEarned': 20,
+              'creditsRequired': 100,
+            },
+            'completed': 20,
+            'outside': 0,
+            'rows': [
+              {
+                'XNXQDM_DISPLAY': '测试学期',
+                'YXXF': 20,
+                'YHXF': 20,
+                'XQGPA': 9.999,
+                'LJGPA': 8.888,
+              },
+            ],
+          };
+        });
+        final state = AppState(teachingSession: session)
+          ..connectedAt = DateTime(2026);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AcademicPage(state: state, feature: AcademicFeature.credits),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining('9.999'), findsNothing);
+        expect(find.textContaining('8.888'), findsNothing);
+        expect(find.text('成绩分析原网页'), findsNothing);
+        if (mode == 'gpaFailure') {
+          expect(find.textContaining('成绩单 GPA 暂未读取'), findsOneWidget);
+          expect(find.text('成绩单 GPA 3.127'), findsNothing);
+          expect(find.text('学分完成情况'), findsOneWidget);
+        } else {
+          expect(find.text('成绩单 GPA 3.127'), findsOneWidget);
+          expect(find.text('测试学期 GPA 0.000'), findsOneWidget);
+          if (mode == 'creditFailure') {
+            expect(find.text('学分报告暂不可用'), findsOneWidget);
+          }
+        }
+        await tester.pumpWidget(const SizedBox());
+        state.dispose();
+      },
+    );
+  }
+  testWidgets(
+    'account change discards late GPA before querying credit reports',
+    (tester) async {
+      final pending = Completer<Map<String, dynamic>>();
+      final session = FakeSession((task, _) => pending.future);
+      final state = AppState(teachingSession: session)
+        ..connectedAt = DateTime(2026);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AcademicPage(state: state, feature: AcademicFeature.credits),
+        ),
+      );
+      await tester.pump();
+      await state.clearSchedule();
+      pending.complete({'ok': true, 'gpa': '3.127', 'rows': []});
+      await tester.pumpAndSettle();
+      expect(find.text('成绩单 GPA 3.127'), findsNothing);
+      expect(session.calls.length, 1);
+      await tester.pumpWidget(const SizedBox());
+      state.dispose();
+    },
+  );
   testWidgets(
     'logged out view never queries academic data and has browser entry',
     (tester) async {

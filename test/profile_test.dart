@@ -46,6 +46,7 @@ void main() {
     await temp.delete(recursive: true);
   });
   AppState state({FakeSession? teaching}) => AppState(
+    verifyPortal: () async => true,
     avatarStore: AvatarStore(directory: () async => temp),
     teachingSession:
         teaching ??

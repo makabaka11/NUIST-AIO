@@ -5,7 +5,7 @@ import '../services/site_registry.dart';
 import '../theme_settings.dart' show uiAction;
 import '../widgets.dart';
 import 'campus_network.dart';
-import 'vpn_page.dart';
+import '../auth/account_binding_page.dart';
 
 class NetworkSettingsPage extends StatefulWidget {
   const NetworkSettingsPage({super.key, required this.state});
@@ -123,7 +123,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute<void>(
-                        builder: (_) => const VpnLoginPage(),
+                        builder: (_) => AccountBindingPage(state: widget.state),
                       ),
                     );
                     if (mounted) {
@@ -134,7 +134,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     }
                   },
             icon: const Icon(Icons.vpn_key_outlined),
-            label: const Text('连接 / 重新验证学校 VPN'),
+            label: const Text('前往账号绑定连接 VPN'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(

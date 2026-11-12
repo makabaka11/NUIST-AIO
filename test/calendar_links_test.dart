@@ -121,6 +121,7 @@ void main() {
         expect(site.entry, l.entry);
       }
       expect(SchoolSites.automatic.map((s) => s.id), [
+        SchoolSiteId.chaoxing,
         SchoolSiteId.teaching,
         SchoolSiteId.campusCard,
         SchoolSiteId.library,

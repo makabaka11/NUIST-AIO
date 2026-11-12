@@ -79,6 +79,9 @@ flutter:
     - assets/js/nuist_library.js
     - assets/js/nuist_calendar.js
     - assets/js/nuist_portal_probe.js
+    - assets/js/nuist_auth_page_state.js
+    - assets/js/nuist_passkey_register.js
+    - assets/js/nuist_passkey_login.js
     - assets/js/nuist_bulletin.js
     - assets/js/nuist_vpn.js
     - assets/js/nuist_schedule.js

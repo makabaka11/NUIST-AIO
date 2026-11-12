@@ -11,7 +11,7 @@ import 'app_state.dart';
 import 'about/about_page.dart';
 import 'updates/update_ui.dart';
 import 'library/library_page.dart';
-import 'chaoxing/chaoxing_page.dart';
+import 'auth/account_binding_page.dart';
 import 'calendar/calendar_page.dart';
 import 'services/browser_links.dart';
 import 'services/site_registry.dart';
@@ -25,7 +25,6 @@ import 'accounts/dorm_picker.dart';
 import 'home_page.dart';
 import 'schedule/learning_page.dart';
 import 'schedule/schedule_widgets.dart';
-import 'auth/login_page.dart';
 import 'onboarding.dart';
 import 'theme_settings.dart';
 import 'widgets.dart';
@@ -166,7 +165,9 @@ class _CampusShellState extends State<CampusShell> {
 
   void login() => Navigator.push(
     context,
-    MaterialPageRoute<void>(builder: (_) => LoginPage(state: widget.state)),
+    MaterialPageRoute<void>(
+      builder: (_) => AccountBindingPage(state: widget.state),
+    ),
   );
 
   Widget _buildAppBarTitle(int selected, ColorScheme colors) {
@@ -354,7 +355,7 @@ class _CampusShellState extends State<CampusShell> {
       ),
       LearningPage(state: state),
       _FeaturesPage(state: state),
-      _ProfilePage(state: state, onLogin: login),
+      _ProfilePage(state: state),
     ];
 
     if (isMiuix) {
@@ -649,46 +650,17 @@ class _FeaturesPageState extends State<_FeaturesPage> {
 }
 
 class _ProfilePage extends StatelessWidget {
-  const _ProfilePage({required this.state, required this.onLogin});
+  const _ProfilePage({required this.state});
   final AppState state;
-  final VoidCallback onLogin;
-  Future<void> disconnect(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('移除本机登录会话？'),
-        content: const Text(
-          '将清除本软件中的会话凭据、课表、校园账户缓存、宿舍选择与网页登录数据。不会退出系统浏览器中的学校账号。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('移除'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      await uiAction(context, state.disconnect);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final canDisconnect =
-        state.connectedAt != null ||
-        state.schedule != null ||
-        state.dorm != null ||
-        state.accounts.wallet != null ||
-        state.accounts.bills != null ||
-        state.accounts.electricity != null;
+    void bindings() => Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => AccountBindingPage(state: state)),
+    );
     return PageBody(
       children: [
-        ProfileHeader(state: state, onLogin: onLogin),
+        ProfileHeader(state: state, onLogin: bindings),
         const SectionTitle('偏好设置'),
         PreferenceGroup(
           children: [
@@ -753,24 +725,14 @@ class _ProfilePage extends StatelessWidget {
             ),
           ],
         ),
-        const SectionTitle('学习账号'),
-        Card(child: ChaoxingAccountTile(state: state)),
         const SectionTitle('账号与隐私'),
         PreferenceGroup(
           children: [
             PreferenceRow(
-              icon: Icons.shield_outlined,
-              title: '本机会话',
-              subtitle: state.connectedAt == null
-                  ? '尚未保存凭据'
-                  : '上次连接：${state.connectedAt!.month}月${state.connectedAt!.day}日',
-              onTap: () {},
-              trailing: canDisconnect
-                  ? TextButton(
-                      onPressed: () => disconnect(context),
-                      child: const Text('移除'),
-                    )
-                  : null,
+              icon: Icons.manage_accounts_outlined,
+              title: '账号绑定',
+              subtitle: '统一认证、通行密钥、学习通与 VPN',
+              onTap: bindings,
             ),
           ],
         ),

@@ -19,6 +19,8 @@ class ServiceInitializationPanel extends StatelessWidget {
             (s) => {
               SitePhase.ready,
               SitePhase.failed,
+              // Optional sessions with no saved login were checked and skipped.
+              SitePhase.planned,
             }.contains(state.sitePhase(s)),
           )
           .length;
