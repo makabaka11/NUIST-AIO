@@ -37,6 +37,7 @@ void main() {
     final state = AppState();
     await state.load();
     state.onboarded = true;
+    await state.setLiquidGlassNav(false);
     await state.setUiStyle(miuix ? UiStyle.miuix : UiStyle.material3);
     await tester.pumpWidget(CampusApp(state: state));
     await tester.pumpAndSettle();

@@ -82,8 +82,12 @@ void main() {
     expect(state.uiStyle, UiStyle.material3);
     expect(find.byType(LiquidGlassNavBar), findsOneWidget);
     expect(find.byType(MiuixNavigationBar), findsNothing);
-    // 切换到 MIUIX：导航栏换成 MiuixNavigationBar，液态玻璃不再渲染。
+    // 液态玻璃在两个主题下都启用；关闭后恢复各自的底栏。
     await state.setUiStyle(UiStyle.miuix);
+    await tester.pumpAndSettle();
+    expect(find.byType(MiuixNavigationBar), findsNothing);
+    expect(find.byType(LiquidGlassNavBar), findsOneWidget);
+    await state.setLiquidGlassNav(false);
     await tester.pumpAndSettle();
     expect(find.byType(MiuixNavigationBar), findsOneWidget);
     expect(find.byType(LiquidGlassNavBar), findsNothing);
@@ -91,8 +95,11 @@ void main() {
     await tester.tap(find.text('学习'));
     await tester.pumpAndSettle();
     expect(find.byType(MiuixNavigationBar), findsOneWidget);
-    // 切回 Material 3，液态玻璃导航栏恢复。
+    // 关闭状态在主题之间保留；再次开启后替换 Material 3 底栏。
     await state.setUiStyle(UiStyle.material3);
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationBar), findsOneWidget);
+    await state.setLiquidGlassNav(true);
     await tester.pumpAndSettle();
     expect(find.byType(LiquidGlassNavBar), findsOneWidget);
     // 持久化生效。

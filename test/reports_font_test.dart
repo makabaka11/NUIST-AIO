@@ -164,7 +164,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('主题配色'), findsNothing);
       expect(find.text('壁纸动态取色'), findsNothing);
-      expect(find.text('液态玻璃导航栏'), findsNothing);
+      expect(find.text('液态玻璃导航栏'), findsOneWidget);
       for (final mode in [md.ThemeMode.light, md.ThemeMode.dark]) {
         await state.setMode(mode);
         for (final palette in [

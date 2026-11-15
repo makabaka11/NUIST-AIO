@@ -1,0 +1,39 @@
+{
+  "repository": "https://github.com/SukiSU-Ultra/SukiSU-Ultra",
+  "files": [
+    {
+      "source": "component/FloatingBottomBar.kt",
+      "sha256": "3397e184ad352c597f810b44699bb960d7b4a6fd07c0b3933da025b7db8f07d8"
+    },
+    {
+      "source": "component/miuix/animation/DampedDragAnimation.kt",
+      "sha256": "e379a5219a330065cd00c71f075ed89c3b20ac1ffc01d22b078e75626a60a9be"
+    },
+    {
+      "source": "component/miuix/animation/InteractiveHighlight.kt",
+      "sha256": "7396282bcc58b59c83ea0a81ed7e14b86f1a37fd6ec682f5875394f4a4e5ee18"
+    },
+    {
+      "source": "component/miuix/modifier/DragGestureInspector.kt",
+      "sha256": "c517e8d2cb4b1ae563f1a13594e02dd5c54cab084930a9485459e7f3359d26a2"
+    },
+    {
+      "source": "component/liquid/CombinedBackdrop.kt",
+      "sha256": "c93ff1a752a52357dc6c1c0138b3d86e726d112108d1b238eba63796cc71c0f0"
+    },
+    {
+      "source": "component/liquid/InnerShadow.kt",
+      "sha256": "58a8f97445a4f3ba3c009ec90e780b12b80d8be344f1db7d8e46b616490d366e"
+    },
+    {
+      "source": "component/liquid/Lens.kt",
+      "sha256": "9ca36dd1033b16f539526b12ae7789136e8863d2d271bf8633941cc3b70f2e24"
+    },
+    {
+      "source": "component/liquid/Vibrancy.kt",
+      "sha256": "cee537c5a9d85ebc30a0aa8b15f19ef69e9ec83429beb64f607712bacdc695d5"
+    }
+  ],
+  "revision": "b2d01e8bcea80139be9076c63dcc9a6694691d72",
+  "license_notice": "android/third_party/sukisu-liquid-glass/NOTICE.md"
+}

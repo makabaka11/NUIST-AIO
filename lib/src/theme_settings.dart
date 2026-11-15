@@ -241,16 +241,16 @@ class ThemeControls extends StatelessWidget {
                     ?.copyWith(color: colors.onSurfaceVariant),
               ),
           ],
-          if (!isMiuix) ...[
-            const SectionTitle('导航栏'),
-            PreferenceSwitchRow(
-              title: '液态玻璃导航栏',
-              subtitle: '悬浮毛玻璃底栏；关闭后使用 Material 3 导航栏',
-              value: state.liquidGlassNav,
-              onChanged: (value) =>
-                  uiAction(context, () => state.setLiquidGlassNav(value)),
-            ),
-          ],
+          const SectionTitle('导航栏'),
+          PreferenceSwitchRow(
+            title: '液态玻璃导航栏',
+            subtitle: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+                ? '原生悬浮玻璃底栏，跟随主题配色；关闭后恢复主题底栏'
+                : '悬浮毛玻璃底栏；关闭后恢复主题底栏',
+            value: state.liquidGlassNav,
+            onChanged: (value) =>
+                uiAction(context, () => state.setLiquidGlassNav(value)),
+          ),
           const SectionTitle('效果预览'),
           Card(
             color: colors.secondaryContainer,

@@ -1,0 +1,17 @@
+// flutter_inappwebview_android 1.1.3 calls the removed AGP 9 default rule name.
+// Remap that legacy Groovy DSL call during configuration, without changing the
+// plugin's source, runtime WebView code, or anything in the global pub cache.
+subprojects { pluginProject ->
+    if (pluginProject.name == 'flutter_inappwebview_android') {
+        pluginProject.plugins.withId('com.android.library') {
+            def androidExtension = pluginProject.extensions.getByName('android')
+            def optimizedRules = androidExtension.getDefaultProguardFile('proguard-android-optimize.txt')
+            androidExtension.metaClass.getDefaultProguardFile = { String name ->
+                if (name != 'proguard-android.txt' && name != 'proguard-android-optimize.txt') {
+                    throw new GradleException("Unexpected default ProGuard configuration: $name")
+                }
+                optimizedRules
+            }
+        }
+    }
+}

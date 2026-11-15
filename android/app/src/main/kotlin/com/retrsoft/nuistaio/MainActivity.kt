@@ -1,6 +1,6 @@
 package com.retrsoft.nuistaio
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
@@ -12,8 +12,9 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import com.retrsoft.nuistaio.navigation.LiquidNavFactory
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private var pendingUpdate: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,6 +49,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            "nuistaio/liquid_nav", LiquidNavFactory(flutterEngine.dartExecutor.binaryMessenger)
+        )
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nuistaio/updates")
             .setMethodCallHandler { call, result ->
                 if (call.method != "installApk") { result.notImplemented(); return@setMethodCallHandler }

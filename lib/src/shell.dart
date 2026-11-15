@@ -8,6 +8,7 @@ import 'package:flutter_miuix/miuix.dart';
 import 'package:flutter_liquid_glass_nav_bar/flutter_liquid_glass_nav_bar.dart';
 
 import 'app_state.dart';
+import 'navigation/android_liquid_nav.dart';
 import 'about/about_page.dart';
 import 'updates/update_ui.dart';
 import 'library/library_page.dart';
@@ -339,12 +340,64 @@ class _CampusShellState extends State<CampusShell> {
     );
   }
 
+  Widget _buildLiquidNavBar(ColorScheme colors) {
+    return !kIsWeb && Platform.isAndroid
+        ? AndroidLiquidNav(
+            selectedIndex: selected,
+            onSelected: (value) => setState(() => selected = value),
+          )
+        : SizedBox(
+            // Match the package's 58px bar + 14px floating gap and its safe
+            // area factor. Scaffold can now reserve this actual height.
+            height: 58 + 14 + MediaQuery.paddingOf(context).bottom * 0.45,
+            child: LiquidGlassNavBar(
+              height: 58,
+              floatingOffset: 14,
+              // 流光是无限循环动画，会让 widget 测试中的 pumpAndSettle
+              // 永远无法安定，因此在测试环境下关闭。
+              enableShimmer:
+                  kIsWeb || !Platform.environment.containsKey('FLUTTER_TEST'),
+              // 提高透光率并加强高斯模糊，让底栏后方内容清晰透出，
+              // 呈现明显的玻璃质感（浅色/深色分别调参）。
+              glassOpacity: colors.brightness == Brightness.dark ? 0.10 : 0.14,
+              glassBlurSigma: colors.brightness == Brightness.dark ? 26 : 22,
+              pillOpacity: colors.brightness == Brightness.dark ? 0.26 : 0.32,
+              pillBlurSigma: colors.brightness == Brightness.dark ? 13 : 11,
+              currentIndex: selected,
+              onTap: (value) => setState(() => selected = value),
+              selectedItemColor: colors.primary,
+              items: const [
+                LiquidGlassNavBarItem(
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home_rounded,
+                  label: '首页',
+                ),
+                LiquidGlassNavBarItem(
+                  icon: Icons.auto_stories_outlined,
+                  activeIcon: Icons.auto_stories,
+                  label: '学习',
+                ),
+                LiquidGlassNavBarItem(
+                  icon: Icons.widgets_outlined,
+                  activeIcon: Icons.widgets,
+                  label: '功能',
+                ),
+                LiquidGlassNavBarItem(
+                  icon: Icons.person_outline,
+                  activeIcon: Icons.person,
+                  label: '我的',
+                ),
+              ],
+            ),
+          );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final state = widget.state;
     final isMiuix = state.uiStyle == UiStyle.miuix;
-    final liquidNav = !isMiuix && state.liquidGlassNav;
+    final liquidNav = state.liquidGlassNav;
 
     final pages = <Widget>[
       CampusHomePage(
@@ -361,23 +414,26 @@ class _CampusShellState extends State<CampusShell> {
     if (isMiuix) {
       final miuixColors = MiuixTheme.of(context).colors;
       return Scaffold(
+        extendBody: liquidNav,
         appBar: _buildMiuixAppBar(selected, miuixColors),
         body: SafeArea(
           top: false,
+          bottom: !liquidNav,
           child: _TabFadeStack(index: selected, children: pages),
         ),
         // flutter_miuix 1.3 的底栏项固定为 64dp；限制此处标签缩放，
         // 正文仍完整遵循系统大字体，避免底栏标签被裁切。
-        bottomNavigationBar: MediaQuery.withClampedTextScaling(
-          maxScaleFactor: 1.2,
-          child: _buildMiuixNavBar(miuixColors),
-        ),
+        bottomNavigationBar: liquidNav
+            ? _buildLiquidNavBar(colors)
+            : MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.2,
+                child: _buildMiuixNavBar(miuixColors),
+              ),
       );
     }
 
     return Scaffold(
-      // Extend content behind the glass, but bound the navigation slot below:
-      // the package's Align otherwise expands to the full scaffold height.
+      // Both glass implementations sample the page beneath the floating bar.
       extendBody: liquidNav,
       appBar: AppBar(
         toolbarHeight: 80,
@@ -404,52 +460,7 @@ class _CampusShellState extends State<CampusShell> {
         child: _TabFadeStack(index: selected, children: pages),
       ),
       bottomNavigationBar: liquidNav
-          ? SizedBox(
-              // Match the package's 58px bar + 14px floating gap and its safe
-              // area factor. Scaffold can now reserve this actual height.
-              height: 58 + 14 + MediaQuery.paddingOf(context).bottom * 0.45,
-              child: LiquidGlassNavBar(
-                height: 58,
-                floatingOffset: 14,
-                // 流光是无限循环动画，会让 widget 测试中的 pumpAndSettle
-                // 永远无法安定，因此在测试环境下关闭。
-                enableShimmer:
-                    kIsWeb || !Platform.environment.containsKey('FLUTTER_TEST'),
-                // 提高透光率并加强高斯模糊，让底栏后方内容清晰透出，
-                // 呈现明显的玻璃质感（浅色/深色分别调参）。
-                glassOpacity: colors.brightness == Brightness.dark
-                    ? 0.10
-                    : 0.14,
-                glassBlurSigma: colors.brightness == Brightness.dark ? 26 : 22,
-                pillOpacity: colors.brightness == Brightness.dark ? 0.26 : 0.32,
-                pillBlurSigma: colors.brightness == Brightness.dark ? 13 : 11,
-                currentIndex: selected,
-                onTap: (value) => setState(() => selected = value),
-                selectedItemColor: colors.primary,
-                items: const [
-                  LiquidGlassNavBarItem(
-                    icon: Icons.home_outlined,
-                    activeIcon: Icons.home_rounded,
-                    label: '首页',
-                  ),
-                  LiquidGlassNavBarItem(
-                    icon: Icons.auto_stories_outlined,
-                    activeIcon: Icons.auto_stories,
-                    label: '学习',
-                  ),
-                  LiquidGlassNavBarItem(
-                    icon: Icons.widgets_outlined,
-                    activeIcon: Icons.widgets,
-                    label: '功能',
-                  ),
-                  LiquidGlassNavBarItem(
-                    icon: Icons.person_outline,
-                    activeIcon: Icons.person,
-                    label: '我的',
-                  ),
-                ],
-              ),
-            )
+          ? _buildLiquidNavBar(colors)
           : NavigationBar(
               selectedIndex: selected,
               onDestinationSelected: (value) =>
