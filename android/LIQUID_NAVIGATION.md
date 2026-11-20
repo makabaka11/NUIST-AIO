@@ -46,6 +46,15 @@ miuix-blur / shader 的 minSdk 为 33，仅精确覆盖这两个模块的清单�
 工厂在 API 33 以下完全不创建 Compose 玻璃类，使用隔离的 `LegacyLiquidNavView`：
 Android 12 使用模糊，更早系统使用高不透明度兼容样式。其他平台沿用原 Flutter 底栏。
 
+## MIUIX 页面交互
+
+MIUIX 主页面使用 `lib/src/navigation/tab_pages.dart` 的横向分页容器，
+点击底栏时连续滑过中间页，支持手势跟随、释放吸附与底栏选中同步。
+点击翻页采用 SukiSU 所用 miuix 0.9.4 `PagerNavigationSpringSpec` 的
+弹簧参数：质量 1、刚度 322.2、阻尼 32.31，静止阈值换算到页面宽度。
+快速切换会取消旧目标；页面持续挂载，保留输入和滚动状态。MD3 保留淡入切页。
+系统开启减少动画时直接切换，RTL 布局反转横向手势与过渡方向。
+
 ## 验证
 
 Flutter 模拟测试检查创建参数、选中回调及非法值、主题更新、安全区、销毁，以及

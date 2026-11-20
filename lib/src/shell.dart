@@ -9,6 +9,7 @@ import 'package:flutter_liquid_glass_nav_bar/flutter_liquid_glass_nav_bar.dart';
 
 import 'app_state.dart';
 import 'navigation/android_liquid_nav.dart';
+import 'navigation/tab_pages.dart';
 import 'about/about_page.dart';
 import 'updates/update_ui.dart';
 import 'library/library_page.dart';
@@ -104,49 +105,6 @@ class CampusShell extends StatefulWidget {
   final AppState state;
   @override
   State<CampusShell> createState() => _CampusShellState();
-}
-
-/// 带淡入动画的 IndexedStack。切换标签时新页面从 opacity 0→1 淡入，
-/// 保留所有子页面的 State（IndexedStack 始终挂载全部子节点），
-/// 避免硬切闪现。
-class _TabFadeStack extends StatefulWidget {
-  const _TabFadeStack({required this.index, required this.children});
-  final int index;
-  final List<Widget> children;
-
-  @override
-  State<_TabFadeStack> createState() => _TabFadeStackState();
-}
-
-class _TabFadeStackState extends State<_TabFadeStack>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 260),
-    value: 1,
-  );
-  late int _shown = widget.index;
-
-  @override
-  void didUpdateWidget(covariant _TabFadeStack oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.index != widget.index) {
-      _shown = widget.index;
-      _controller.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => FadeTransition(
-    opacity: CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    child: IndexedStack(index: _shown, children: widget.children),
-  );
 }
 
 class _CampusShellState extends State<CampusShell> {
@@ -419,7 +377,12 @@ class _CampusShellState extends State<CampusShell> {
         body: SafeArea(
           top: false,
           bottom: !liquidNav,
-          child: _TabFadeStack(index: selected, children: pages),
+          child: TabPages(
+            index: selected,
+            horizontal: isMiuix,
+            onSelected: (value) => setState(() => selected = value),
+            children: pages,
+          ),
         ),
         // flutter_miuix 1.3 的底栏项固定为 64dp；限制此处标签缩放，
         // 正文仍完整遵循系统大字体，避免底栏标签被裁切。
@@ -457,7 +420,12 @@ class _CampusShellState extends State<CampusShell> {
         top: false,
         // 液态玻璃底栏悬浮时让内容延伸到底栏背后，呈现毛玻璃折射效果。
         bottom: !liquidNav,
-        child: _TabFadeStack(index: selected, children: pages),
+        child: TabPages(
+          index: selected,
+          horizontal: isMiuix,
+          onSelected: (value) => setState(() => selected = value),
+          children: pages,
+        ),
       ),
       bottomNavigationBar: liquidNav
           ? _buildLiquidNavBar(colors)
