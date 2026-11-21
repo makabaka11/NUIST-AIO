@@ -504,6 +504,58 @@ class AppReleaseSources {
   );
 }
 
+/// Application-owned public announcement file.
+///
+/// Maintainers update the Markdown file without shipping an app release. The
+/// document is public data, so it never reuses a campus session, cookie or
+/// portal ticket. Fetches try [mirror] first, then [raw] and [jsDelivr].
+/// Relative images resolve against [raw], while relative links resolve against
+/// [page].
+class AppAnnouncementSource {
+  static const owner = 'makabaka11';
+  static const repository = 'NUIST-AIO';
+  static const branch = 'main';
+  static const path = 'announcement.md';
+
+  /// Development override, for example:
+  /// `--dart-define=ANNOUNCEMENT_URL=https://example.com/notice.md`.
+  static const _override = String.fromEnvironment('ANNOUNCEMENT_URL');
+
+  static Uri? get _custom {
+    final value = Uri.tryParse(_override);
+    return value != null &&
+            value.scheme == 'https' &&
+            value.userInfo.isEmpty &&
+            value.host.isNotEmpty
+        ? value
+        : null;
+  }
+
+  static Uri get raw =>
+      _custom ??
+      Uri.https(
+        'raw.githubusercontent.com',
+        '/$owner/$repository/$branch/$path',
+      );
+
+  /// Human-facing location of the same document, used as the base for
+  /// relative hyperlinks inside the announcement.
+  static Uri get page =>
+      _custom ??
+      Uri.https('github.com', '/$owner/$repository/blob/$branch/$path');
+
+  /// The built-in GitHub mirror. Announcements are fetched through it first so
+  /// they work on networks where raw.githubusercontent.com is unreachable.
+  static Uri get mirror => Uri.parse('https://gh-proxy.org/$raw');
+
+  /// A cache-friendly fallback for networks where the mirror is unavailable.
+  static Uri get jsDelivr =>
+      Uri.https('cdn.jsdelivr.net', '/gh/$owner/$repository@$branch/$path');
+
+  static List<Uri> get candidates =>
+      _custom != null ? [raw] : [mirror, raw, jsDelivr];
+}
+
 /// Public community references only; no school authentication or probes.
 class WikiCommunitySources {
   static final tieba = Uri.parse(

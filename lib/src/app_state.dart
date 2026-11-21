@@ -22,6 +22,7 @@ import 'auth/session_store.dart';
 import 'auth/portal_auth.dart';
 import 'network/campus_network.dart';
 import 'network/link_detector.dart';
+import 'announcements/announcement_service.dart';
 import 'updates/update_service.dart';
 import 'schedule/schedule.dart';
 import 'accounts/accounts.dart';
@@ -62,9 +63,11 @@ class AppState extends ChangeNotifier {
     BulletinRepository? bulletinRepository,
     CampusLinkDetector? linkDetector,
     UpdateController? updateController,
+    AnnouncementController? announcementController,
     AvatarStore? avatarStore,
     ChaoxingRepository? chaoxingRepository,
   }) : updates = updateController ?? UpdateController(),
+       announcements = announcementController ?? AnnouncementController(),
        holidayRepository = holidayRepository ?? PublicHolidayRepository(),
        chaoxing = chaoxingRepository ?? ChaoxingRepository(),
        avatars = avatarStore ?? AvatarStore(),
@@ -163,6 +166,7 @@ class AppState extends ChangeNotifier {
   }
 
   final UpdateController updates;
+  final AnnouncementController announcements;
   late final CampusLinkDetector networkLinks;
   void _networkChanged() {
     if (!_disposed) notifyListeners();
@@ -935,6 +939,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     await updates.loadSettings();
+    await announcements.restoreCache();
     try {
       onboarded = await _prefs.getBool('onboarded') ?? false;
       dashboardLayout = DashboardLayout.decode(
@@ -1029,6 +1034,7 @@ class AppState extends ChangeNotifier {
     unawaited(portalAuth.close());
     _disposed = true;
     updates.dispose();
+    announcements.dispose();
     networkLinks.removeListener(_networkChanged);
     networkLinks.dispose();
     chaoxing.removeListener(_chaoxingSessionChanged);

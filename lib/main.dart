@@ -18,4 +18,9 @@ Future<void> main() async {
       child: CampusApp(state: state),
     ),
   );
+  // Public announcements are optional content: fetch after the first frame so
+  // they never delay rendering, onboarding or campus-service initialization.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    state.announcements.refreshOnStartup();
+  });
 }

@@ -1,5 +1,6 @@
 import 'campus_ui.dart';
 
+import 'announcements/announcement_ui.dart';
 import 'app_state.dart';
 import 'dashboard/dashboard_widgets.dart';
 import 'schedule/schedule_widgets.dart';
@@ -34,6 +35,7 @@ class CampusHomePage extends StatelessWidget {
         : Icons.wb_sunny_outlined;
     return PageBody(
       children: [
+        AnnouncementBanner(controller: state.announcements),
         if (state.startupNotice != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
