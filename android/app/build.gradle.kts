@@ -29,6 +29,9 @@ android {
     buildFeatures { compose = true }
 
     compileOptions {
+        // flutter_local_notifications 使用 java.time API，Android 构建要求
+        // 开启 core library desugaring（即使不使用定时通知也需要）。
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -81,6 +84,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")

@@ -20,6 +20,7 @@ import 'services/site_registry.dart';
 import 'profile/profile_header.dart';
 import 'bulletin/bulletin_page.dart';
 import 'network/network_settings.dart';
+import 'notifications/notification_settings_page.dart';
 import 'academic/academic.dart';
 import 'academic/academic_page.dart';
 import 'accounts/accounts_page.dart';
@@ -662,6 +663,17 @@ class _ProfilePage extends StatelessWidget {
                 context,
                 MaterialPageRoute<void>(
                   builder: (_) => ThemeSettingsPage(state: state),
+                ),
+              ),
+            ),
+            PreferenceRow(
+              icon: Icons.notifications_outlined,
+              title: '通知设置',
+              subtitle: '作业、公告、电费、考试、成绩与登录失效提醒',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => NotificationSettingsPage(state: state),
                 ),
               ),
             ),

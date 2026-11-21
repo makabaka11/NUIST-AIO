@@ -130,6 +130,8 @@ class SchoolSites {
         SiteFeature('chaoxingProgress', '课程任务点进度', implemented: true),
         SiteFeature('chaoxingWork', '学习通作业', implemented: true),
         SiteFeature('chaoxingExam', '学习通考试', implemented: true),
+        // 系统通知轮询：只读复用作业接口，仅在用户开启通知后运行。
+        SiteFeature('chaoxingWorkReminder', '学习通作业提醒轮询', implemented: true),
       ],
       credentialRule: '仅在超星官方页登录；Cookie 保留原生作用域，Android 验证后落盘，不导出、不保存密码。仅持久化连接意愿；课程只读接口验证通过后才能同步。',
       renewalRule: '启动及初始化时，仅对保存过连接意愿或旧安装原生会话的账号进行一次有界只读验证，与校园服务并行且不依赖门户。未连接则不请求；失效提示官方登录。教务就绪后再独立同步本学期数据，不等待人工确认来结束初始化；首次或名单变化需用户确认扫描课程；选择按校园账号与学期存于系统安全存储。换号清除连接意愿、Cookie、选择及缓存。',
@@ -234,6 +236,9 @@ class SchoolSites {
           entry: 'https://jwxt.nuist.edu.cn/jwapp/sys/studentWdksapApp/*default/index.do?EMAP_LANG=zh#/wdksap',
           readySelector: '#wdksapinfoRight',
         ),
+        // 系统通知轮询：只读复用教务考试/成绩查询，仅在用户开启通知后运行。
+        SiteFeature('examReminder', '新考试通知轮询', implemented: true),
+        SiteFeature('gradeReminder', '新成绩通知轮询', implemented: true),
       ],
       probePrefixes: const [
         '/jwapp/sys/wdkb/',
@@ -262,6 +267,8 @@ class SchoolSites {
         SiteFeature('power_main', '本部电费', implemented: true),
         SiteFeature('power_qin', '沁园 42/43 电费', implemented: true),
         SiteFeature('power_jnh', '金牛湖电费', implemented: true),
+        // 系统通知轮询：只读复用电费接口，仅在用户开启通知后运行。
+        SiteFeature('powerAlert', '电费预警轮询', implemented: true),
       ],
       probePrefixes: const ['/plat-pc/', '/campus-card-pc/'],
       asset: 'assets/js/nuist_accounts.js',
@@ -300,6 +307,8 @@ class SchoolSites {
       features: const [
         SiteFeature('bulletin_list', '公告列表与日期分类', implemented: true),
         SiteFeature('bulletin_detail', '公告正文与附件入口', implemented: true),
+        // 系统通知轮询：只读复用公告列表，公网可达、与账号会话无关。
+        SiteFeature('bulletinReminder', '新公告通知轮询', implemented: true),
       ],
       asset: 'assets/js/nuist_bulletin.js',
       probeTask: 'list',

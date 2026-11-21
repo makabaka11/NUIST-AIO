@@ -24,6 +24,8 @@ import 'network/campus_network.dart';
 import 'network/link_detector.dart';
 import 'announcements/announcement_service.dart';
 import 'updates/update_service.dart';
+import 'notifications/notification_center.dart';
+import 'notifications/notification_settings.dart';
 import 'schedule/schedule.dart';
 import 'accounts/accounts.dart';
 import 'services/service_sessions.dart';
@@ -66,11 +68,13 @@ class AppState extends ChangeNotifier {
     AnnouncementController? announcementController,
     AvatarStore? avatarStore,
     ChaoxingRepository? chaoxingRepository,
+    NotificationSettings? notificationSettings,
   }) : updates = updateController ?? UpdateController(),
        announcements = announcementController ?? AnnouncementController(),
        holidayRepository = holidayRepository ?? PublicHolidayRepository(),
        chaoxing = chaoxingRepository ?? ChaoxingRepository(),
        avatars = avatarStore ?? AvatarStore(),
+       notifications = notificationSettings ?? NotificationSettings(),
        bulletins = bulletinRepository ?? BulletinRepository(),
        serviceSessions = {
          SchoolSiteId.library: librarySession ?? NativeLibrarySession(),
@@ -167,6 +171,11 @@ class AppState extends ChangeNotifier {
 
   final UpdateController updates;
   final AnnouncementController announcements;
+  final NotificationSettings notifications;
+
+  /// 通知中心由 main() 在应用启动后装配（依赖 state 自身），
+  /// 通知设置页通过它启动/跟随轮询。
+  CampusNotificationCenter? notificationCenter;
   late final CampusLinkDetector networkLinks;
   void _networkChanged() {
     if (!_disposed) notifyListeners();
@@ -939,6 +948,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     await updates.loadSettings();
+    await notifications.load();
     await announcements.restoreCache();
     try {
       onboarded = await _prefs.getBool('onboarded') ?? false;
@@ -1035,6 +1045,8 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     updates.dispose();
     announcements.dispose();
+    notificationCenter?.dispose();
+    notifications.dispose();
     networkLinks.removeListener(_networkChanged);
     networkLinks.dispose();
     chaoxing.removeListener(_chaoxingSessionChanged);
