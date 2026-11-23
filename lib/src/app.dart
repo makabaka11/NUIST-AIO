@@ -129,12 +129,21 @@ class CampusApp extends StatelessWidget {
               elevation: 0,
               labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             ),
-            // 统一页面转场：缩放 + 淡入，避免硬切闪现。
+            // 统一页面转场：缩放 + 淡入。关闭 allowSnapshotting 避免快速
+            // pop+push 时前一页面的 SnapshotWidget 快照残影（miuix 下因
+            // ClipPath/MiuixCard 渲染复杂，残影尤为明显；MD3 下仅首次进入
+            // 新页面时因 widget 构建延迟而产生闪现）。
             pageTransitionsTheme: const PageTransitionsTheme(
               builders: {
-                TargetPlatform.android: ZoomPageTransitionsBuilder(),
-                TargetPlatform.iOS: ZoomPageTransitionsBuilder(),
-                TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
+                TargetPlatform.android: ZoomPageTransitionsBuilder(
+                  allowSnapshotting: false,
+                ),
+                TargetPlatform.iOS: ZoomPageTransitionsBuilder(
+                  allowSnapshotting: false,
+                ),
+                TargetPlatform.macOS: ZoomPageTransitionsBuilder(
+                  allowSnapshotting: false,
+                ),
               },
             ),
           );

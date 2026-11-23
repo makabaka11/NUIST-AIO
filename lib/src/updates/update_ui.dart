@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_miuix/miuix.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../campus_ui.dart';
@@ -18,22 +20,50 @@ Future<void> showUpdateDialog(
   AppRelease release,
 ) async {
   updates.markPresented(release);
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => _DownloadDialog(updates: updates, release: release),
-  );
+  final miuix = UiStyleScope.of(context) == UiStyle.miuix;
+  if (miuix) {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      sheetAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 320),
+        reverseDuration: Duration(milliseconds: 240),
+      ),
+      builder: (_) => _UpdateDialog(
+        updates: updates,
+        release: release,
+        miuix: true,
+      ),
+    );
+  } else {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _UpdateDialog(
+        updates: updates,
+        release: release,
+        miuix: false,
+      ),
+    );
+  }
 }
 
-class _DownloadDialog extends StatefulWidget {
-  const _DownloadDialog({required this.updates, required this.release});
+class _UpdateDialog extends StatefulWidget {
+  const _UpdateDialog({
+    required this.updates,
+    required this.release,
+    required this.miuix,
+  });
   final UpdateController updates;
   final AppRelease release;
+  final bool miuix;
   @override
-  State<_DownloadDialog> createState() => _DownloadDialogState();
+  State<_UpdateDialog> createState() => _UpdateDialogState();
 }
 
-class _DownloadDialogState extends State<_DownloadDialog> {
+class _UpdateDialogState extends State<_UpdateDialog> {
   late final download = widget.updates.downloader();
   bool busy = false;
   int received = 0;
@@ -70,7 +100,7 @@ class _DownloadDialogState extends State<_DownloadDialog> {
       if (widget.updates.runtime.platform == TargetPlatform.android) {
         final result = await widget.updates.installer(file!);
         message = result == 'permissionRequired'
-            ? '请允许此应用安装更新，返回后将自动请求安装；也可点击“安装”重试。'
+            ? '请允许此应用安装更新，返回后将自动请求安装；也可点击"安装"重试。'
             : '已请求系统安装，请在系统界面确认。';
       } else {
         message = '下载完成：${file!.path}';
@@ -88,10 +118,118 @@ class _DownloadDialogState extends State<_DownloadDialog> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final asset = widget.release.assetFor(widget.updates.runtime);
+  Future<void> _primaryAction() async {
     final android = widget.updates.runtime.platform == TargetPlatform.android;
+    if (file != null && !android) {
+      try {
+        if (!await launchUrl(file!.uri)) {
+          throw const FormatException('无法打开文件');
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            message = '无法打开文件，请前往下载目录手动打开：${file!.path}';
+          });
+        }
+      }
+    } else {
+      await start();
+    }
+  }
+
+  String get _primaryLabel {
+    if (busy) return '下载中';
+    if (file == null) return '下载';
+    return widget.updates.runtime.platform == TargetPlatform.android
+        ? '安装'
+        : '打开文件';
+  }
+
+  String get _secondaryLabel {
+    if (busy) return '取消下载';
+    return file == null ? '取消' : '关闭';
+  }
+
+  /// 更新日志的 Markdown 样式，与公告页保持一致的行高与标题层级。
+  MarkdownStyleSheet _notesStyle(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final body = theme.textTheme.bodyMedium?.copyWith(
+      height: 1.6,
+      color: colors.onSurface,
+    );
+    return MarkdownStyleSheet.fromTheme(theme).copyWith(
+      p: body,
+      a: body?.copyWith(
+        color: colors.primary,
+        decoration: TextDecoration.underline,
+        decorationColor: colors.primary,
+      ),
+      h1: theme.textTheme.headlineSmall?.copyWith(
+        fontWeight: FontWeight.w600,
+        height: 1.35,
+      ),
+      h2: theme.textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w600,
+        height: 1.4,
+      ),
+      h3: theme.textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+        height: 1.4,
+      ),
+      code: theme.textTheme.bodySmall?.copyWith(
+        backgroundColor: colors.surfaceContainerHighest,
+        fontFamily: 'monospace',
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+  }
+
+  Widget _releaseNotes(BuildContext context) => MarkdownBody(
+    data: widget.release.notes,
+    selectable: true,
+    styleSheet: _notesStyle(context),
+  );
+
+  /// 下载进度与结果消息，两种布局共用。
+  Widget _progressSection() {
+    if (!busy && message == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (busy) ...[
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: total == null
+                ? null
+                : (received / total!).clamp(0, 1),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            total == null
+                ? '已下载 ${(received / 1048576).toStringAsFixed(1)} MB'
+                : '${(received / total! * 100).toStringAsFixed(0)}% · ${(received / 1048576).toStringAsFixed(1)} / ${(total! / 1048576).toStringAsFixed(1)} MB',
+          ),
+        ],
+        if (message != null) ...[
+          const SizedBox(height: 12),
+          Text(message!),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      widget.miuix ? _buildMiuix(context) : _buildMaterial(context);
+
+  // ── MD3：标准 AlertDialog ──────────────────────────────────
+  Widget _buildMaterial(BuildContext context) {
+    final asset = widget.release.assetFor(widget.updates.runtime);
     return AlertDialog(
       title: Text('发现新版本 ${widget.release.tag}'),
       content: SizedBox(
@@ -110,28 +248,12 @@ class _DownloadDialogState extends State<_DownloadDialog> {
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
                 const SizedBox(height: 12),
-                SelectableText(widget.release.notes),
+                _releaseNotes(context),
                 const SizedBox(height: 16),
-                if (asset == null) const Text('该版本未提供适合当前平台与架构的安装包。'),
+                if (asset == null)
+                  const Text('该版本未提供适合当前平台与架构的安装包。'),
                 if (asset != null) Text(asset.name),
-                if (busy) ...[
-                  const SizedBox(height: 12),
-                  LinearProgressIndicator(
-                    value: total == null
-                        ? null
-                        : (received / total!).clamp(0, 1),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    total == null
-                        ? '已下载 ${(received / 1048576).toStringAsFixed(1)} MB'
-                        : '${(received / total! * 100).toStringAsFixed(0)}% · ${(received / 1048576).toStringAsFixed(1)} / ${(total! / 1048576).toStringAsFixed(1)} MB',
-                  ),
-                ],
-                if (message != null) ...[
-                  const SizedBox(height: 12),
-                  Text(message!),
-                ],
+                _progressSection(),
               ],
             ),
           ),
@@ -139,46 +261,109 @@ class _DownloadDialogState extends State<_DownloadDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            busy
-                ? '取消下载'
-                : file == null
-                ? '取消'
-                : '关闭',
-          ),
+          onPressed: busy ? null : () => Navigator.pop(context),
+          child: Text(_secondaryLabel),
         ),
         FilledButton(
-          onPressed: asset == null || busy
-              ? null
-              : () async {
-                  if (file != null && !android) {
-                    try {
-                      if (!await launchUrl(file!.uri)) {
-                        throw const FormatException('无法打开文件');
-                      }
-                    } catch (_) {
-                      if (mounted) {
-                        setState(() {
-                          message = '无法打开文件，请前往下载目录手动打开：${file!.path}';
-                        });
-                      }
-                    }
-                  } else {
-                    await start();
-                  }
-                },
-          child: Text(
-            busy
-                ? '下载中'
-                : file == null
-                ? '下载'
-                : android
-                ? '安装'
-                : '打开文件',
-          ),
+          onPressed: asset == null || busy ? null : _primaryAction,
+          child: Text(_primaryLabel),
         ),
       ],
+    );
+  }
+
+  // ── MIUIX：底部表 + squircle 容器 + 两个大按钮 ────────────
+  Widget _buildMiuix(BuildContext context) {
+    final colors = MiuixTheme.of(context).colors;
+    final theme = MiuixTheme.of(context);
+    final asset = widget.release.assetFor(widget.updates.runtime);
+    return AnimatedPadding(
+      padding: MediaQuery.of(context).viewInsets,
+      duration: const Duration(milliseconds: 200),
+      // 下载进行时不允许下滑或点击遮罩关闭，避免中断。
+      child: PopScope(
+        canPop: !busy,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          decoration: ShapeDecoration(
+            color: colors.surfaceContainer,
+            shape: MiuixSquircleBorder(cornerRadius: 28),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MiuixText(
+                  '发现新版本 ${widget.release.tag}',
+                  style: theme.textStyles.title2,
+                  color: colors.onSurfaceContainer,
+                ),
+                const SizedBox(height: 8),
+                MiuixText(
+                  '下载源：${widget.release.source.label}',
+                  style: theme.textStyles.body2,
+                  color: colors.onSurfaceContainerVariant,
+                ),
+                const SizedBox(height: 16),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * .40,
+                  ),
+                  child: SingleChildScrollView(
+                    child: _releaseNotes(context),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (asset == null)
+                  MiuixText(
+                    '该版本未提供适合当前平台与架构的安装包。',
+                    style: theme.textStyles.body2,
+                    color: colors.onSurfaceContainerVariant,
+                  )
+                else
+                  MiuixText(
+                    asset.name,
+                    style: theme.textStyles.body2,
+                    color: colors.onSurfaceContainerVariant,
+                  ),
+                _progressSection(),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: MiuixTextButton(
+                        _secondaryLabel,
+                        onPressed: busy ? null : () => Navigator.pop(context),
+                        colors: MiuixButtonColors(
+                          color: colors.surfaceContainerHighest,
+                          disabledColor: colors.surfaceContainerHighest,
+                          contentColor: colors.onSurfaceContainer,
+                          disabledContentColor: colors.onSurfaceContainer,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: MiuixTextButton(
+                        _primaryLabel,
+                        onPressed:
+                            asset == null || busy ? null : _primaryAction,
+                        colors: MiuixButtonColors(
+                          color: colors.primary,
+                          disabledColor: colors.primary,
+                          contentColor: colors.onPrimary,
+                          disabledContentColor: colors.onPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -5,8 +5,23 @@ import 'about_actions.dart';
 
 /// 参考 HyperOS 关于页：独立的紫蓝渐变、大图标、文字箭头分组。
 /// 直接使用 flutter_miuix 的顶栏、卡片和 ArrowPreference。
-class MiuixAboutPage extends StatelessWidget {
+class MiuixAboutPage extends StatefulWidget {
   const MiuixAboutPage({super.key});
+  @override
+  State<MiuixAboutPage> createState() => _MiuixAboutPageState();
+}
+
+class _MiuixAboutPageState extends State<MiuixAboutPage> {
+  String? _versionLabel;
+
+  @override
+  void initState() {
+    super.initState();
+    appVersionLabel().then((label) {
+      if (mounted) setState(() => _versionLabel = label);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = MiuixTheme.of(context).brightness == Brightness.dark;
@@ -105,7 +120,7 @@ class MiuixAboutPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       MiuixText(
-                        appVersionLabel,
+                        _versionLabel ?? '正在读取版本…',
                         fontSize: 16,
                         color: secondary,
                       ),

@@ -77,7 +77,6 @@ void main() {
           expect(find.byType(MiuixSmallTopAppBar), findsOneWidget);
         }
         expect(find.text('信大 AIO'), findsOneWidget);
-        expect(find.text('v0.5.0 · Build 15'), findsOneWidget);
         final launches = <String>[];
         const launcher = MethodChannel('plugins.flutter.io/url_launcher');
         final messenger = tester.binding.defaultBinaryMessenger;

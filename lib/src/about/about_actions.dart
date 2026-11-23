@@ -1,10 +1,18 @@
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../campus_ui.dart';
 import '../widgets.dart';
 import '../services/site_registry.dart';
 
-const appVersionLabel = 'v0.5.0 · Build 15';
+/// 异步读取本机应用版本标签，格式与 InstalledBuild.label 一致：
+/// `v<version> · Build <buildNumber>`。供关于页等不便直接持有
+/// UpdateController 的场景使用。
+Future<String> appVersionLabel() async {
+  final info = await PackageInfo.fromPlatform();
+  return 'v${info.version}'
+      '${info.buildNumber.isEmpty ? '' : ' · Build ${info.buildNumber}'}';
+}
 
 class AboutActions {
   static Future<void> openLink(

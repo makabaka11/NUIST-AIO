@@ -2,8 +2,23 @@ import '../campus_ui.dart';
 import 'about_actions.dart';
 
 /// MD3 使用标准顶栏、主题色容器与图标列表，不使用 MIUIX 的渐变展示页。
-class MaterialAboutPage extends StatelessWidget {
+class MaterialAboutPage extends StatefulWidget {
   const MaterialAboutPage({super.key});
+  @override
+  State<MaterialAboutPage> createState() => _MaterialAboutPageState();
+}
+
+class _MaterialAboutPageState extends State<MaterialAboutPage> {
+  String? _versionLabel;
+
+  @override
+  void initState() {
+    super.initState();
+    appVersionLabel().then((label) {
+      if (mounted) setState(() => _versionLabel = label);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -38,7 +53,7 @@ class MaterialAboutPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        appVersionLabel,
+                        _versionLabel ?? '正在读取版本…',
                         style: TextStyle(color: colors.onPrimaryContainer),
                       ),
                       const SizedBox(height: 12),
